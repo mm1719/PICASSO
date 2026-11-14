@@ -1,0 +1,31 @@
+[Unit]
+Description=Plankton USB host service (manual root fallback)
+After=clamav-daemon.service polkit.service udisks2.service plankton-usb-mount-broker.service
+Wants=clamav-daemon.service polkit.service udisks2.service
+Requires=plankton-usb-mount-broker.service
+Before=plankton-platform.service
+Conflicts=plankton-usb-host.service plankton-usb-host-test.service
+
+[Service]
+Type=simple
+User=root
+Group=plankton-inference
+SupplementaryGroups=clamav
+UMask=0007
+EnvironmentFile=/etc/plankton-inference/platform.env
+RuntimeDirectory=plankton-inference
+RuntimeDirectoryMode=2770
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/bin/flock --exclusive --nonblock /run/plankton-inference/usb-host.lock /opt/plankton-inference/current/.venv-phase5/bin/python -m plankton_usb_agent
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/plankton-inference /run/plankton-inference -/media -/run/media
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=

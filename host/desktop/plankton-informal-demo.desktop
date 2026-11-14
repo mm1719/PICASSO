@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Plankton Informal Demo
+Comment=Start the verified local Plankton informal demo
+Exec=/usr/local/sbin/plankton-informal-launcher
+Icon=applications-science
+Terminal=true
+Categories=Science;
+StartupNotify=true

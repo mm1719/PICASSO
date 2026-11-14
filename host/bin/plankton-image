@@ -1,0 +1,270 @@
+#!/bin/sh
+set -eu
+
+usage() {
+    cat >&2 <<'EOF'
+usage:
+  plankton-image build [manifest-directory]
+  plankton-image inspect <candidate-manifest>
+  plankton-image install-test <candidate-manifest>
+  plankton-image promote <candidate-manifest> <unique-release-ref> <release-env-output>
+EOF
+    exit 2
+}
+
+die() { echo "plankton-image: $*" >&2; exit 1; }
+
+repository() {
+    repo=${PLANKTON_REPOSITORY_ROOT:-$PWD}
+    [ -f "$repo/Dockerfile" ] && [ -f "$repo/Dockerfile.runtime-base" ] || \
+        die "run from the repository root"
+    repo=$(/usr/bin/git -C "$repo" -c safe.directory="$repo" rev-parse --show-toplevel)
+}
+
+require_exact_main() {
+    repository
+    [ -z "$(/usr/bin/git -C "$repo" -c safe.directory="$repo" status --porcelain)" ] || \
+        die "worktree is not clean"
+    source_commit=$(/usr/bin/git -C "$repo" -c safe.directory="$repo" rev-parse HEAD)
+    main_commit=$(/usr/bin/git -C "$repo" -c safe.directory="$repo" rev-parse origin/main)
+    [ "$source_commit" = "$main_commit" ] || \
+        die "HEAD $source_commit is not exact origin/main $main_commit"
+}
+
+value() {
+    key=$1
+    file=$2
+    [ -r "$file" ] || die "manifest is unavailable: $file"
+    count=$(/usr/bin/sed -n "/^${key}=/p" "$file" | /usr/bin/wc -l)
+    [ "$count" -eq 1 ] || die "$file must contain exactly one $key"
+    /usr/bin/sed -n "s/^${key}=//p" "$file"
+}
+
+valid_id() {
+    case "$1" in sha256:*) ;; *) return 1 ;; esac
+    digest=${1#sha256:}
+    [ "${#digest}" -eq 64 ] && [ "${digest#*[!0-9a-f]}" = "$digest" ]
+}
+
+valid_ref() {
+    case "$1" in ""|*[!A-Za-z0-9./:@_-]*) return 1 ;; esac
+}
+
+load_manifest() {
+    manifest=$1
+    candidate_release=$(value PLANKTON_CANDIDATE_RELEASE_ID "$manifest")
+    candidate_source=$(value PLANKTON_CANDIDATE_SOURCE_COMMIT "$manifest")
+    candidate_ref=$(value PLANKTON_CANDIDATE_IMAGE_REF "$manifest")
+    candidate_id=$(value PLANKTON_CANDIDATE_IMAGE_ID "$manifest")
+    candidate_user=$(value PLANKTON_CANDIDATE_IMAGE_USER "$manifest")
+    candidate_created=$(value PLANKTON_CANDIDATE_IMAGE_CREATED "$manifest")
+    runtime_base_ref=$(value PLANKTON_RUNTIME_BASE_REF "$manifest")
+    runtime_base_id=$(value PLANKTON_RUNTIME_BASE_ID "$manifest")
+    runtime_lock_sha=$(value PLANKTON_RUNTIME_LOCK_SHA256 "$manifest")
+    case "$candidate_release" in ""|*[!A-Za-z0-9._-]*) die "invalid candidate release ID" ;; esac
+    valid_ref "$candidate_ref" || die "invalid candidate image reference"
+    valid_ref "$runtime_base_ref" || die "invalid runtime base reference"
+    valid_id "$candidate_id" || die "invalid candidate image ID"
+    valid_id "$runtime_base_id" || die "invalid runtime base ID"
+    [ "${#candidate_source}" -eq 40 ] && [ "${candidate_source#*[!0-9a-f]}" = "$candidate_source" ] || \
+        die "invalid candidate source commit"
+    [ "${#runtime_lock_sha}" -eq 64 ] && [ "${runtime_lock_sha#*[!0-9a-f]}" = "$runtime_lock_sha" ] || \
+        die "invalid runtime lock digest"
+}
+
+verify_live_candidate() {
+    load_manifest "$1"
+    actual_id=$(/usr/bin/docker image inspect --format '{{.Id}}' "$candidate_ref" 2>/dev/null) || \
+        die "candidate image is absent: $candidate_ref"
+    [ "$actual_id" = "$candidate_id" ] || die "candidate image identity mismatch"
+    actual_user=$(/usr/bin/docker image inspect --format '{{.Config.User}}' "$candidate_ref")
+    [ "$actual_user" = "$candidate_user" ] || die "candidate configured user mismatch"
+    revision=$(/usr/bin/docker image inspect \
+        --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$candidate_ref")
+    [ "$revision" = "$candidate_source" ] || die "candidate source label mismatch"
+    base_ref_label=$(/usr/bin/docker image inspect \
+        --format '{{ index .Config.Labels "org.plankton.runtime-base" }}' "$candidate_ref")
+    base_id_label=$(/usr/bin/docker image inspect \
+        --format '{{ index .Config.Labels "org.plankton.runtime-base-id" }}' "$candidate_ref")
+    [ "$base_ref_label" = "$runtime_base_ref" ] || die "candidate runtime base reference mismatch"
+    [ "$base_id_label" = "$runtime_base_id" ] || die "candidate runtime base ID mismatch"
+    actual_base_id=$(/usr/bin/docker image inspect --format '{{.Id}}' "$runtime_base_ref" 2>/dev/null) || \
+        die "runtime base image is absent: $runtime_base_ref"
+    [ "$actual_base_id" = "$runtime_base_id" ] || die "runtime base image identity mismatch"
+}
+
+write_candidate_manifest() {
+    output=$1
+    temporary=${output}.tmp.$$
+    umask 077
+    {
+        echo "PLANKTON_CANDIDATE_RELEASE_ID=$candidate_release"
+        echo "PLANKTON_CANDIDATE_SOURCE_COMMIT=$source_commit"
+        echo "PLANKTON_CANDIDATE_IMAGE_REF=$candidate_ref"
+        echo "PLANKTON_CANDIDATE_IMAGE_ID=$candidate_id"
+        echo "PLANKTON_CANDIDATE_IMAGE_USER=$candidate_user"
+        echo "PLANKTON_CANDIDATE_IMAGE_CREATED=$candidate_created"
+        echo "PLANKTON_RUNTIME_BASE_REF=$runtime_base_ref"
+        echo "PLANKTON_RUNTIME_BASE_ID=$runtime_base_id"
+        echo "PLANKTON_RUNTIME_LOCK_SHA256=$runtime_lock_sha"
+    } >"$temporary"
+    /usr/bin/mv "$temporary" "$output"
+}
+
+build_candidate() {
+    [ "$#" -le 1 ] || usage
+    require_exact_main
+    output_directory=${1:-$repo/.local/candidates}
+    /usr/bin/mkdir -p "$output_directory"
+
+    runtime_lock_sha=$(/usr/bin/sha256sum "$repo/requirements/runtime.lock" | /usr/bin/cut -d' ' -f1)
+    lock_short=$(/usr/bin/printf '%s' "$runtime_lock_sha" | /usr/bin/cut -c1-12)
+    runtime_base_ref=plankton-inference-runtime:py311-$lock_short
+    timestamp=$(/usr/bin/date -u +%Y%m%dt%H%M%Sz)
+    short_source=$(/usr/bin/printf '%s' "$source_commit" | /usr/bin/cut -c1-12)
+    candidate_release=candidate-$short_source-$timestamp
+    candidate_ref=plankton-inference:$candidate_release
+    manifest=$output_directory/$candidate_release.env
+    [ ! -e "$manifest" ] || die "candidate manifest already exists: $manifest"
+    if /usr/bin/docker image inspect "$candidate_ref" >/dev/null 2>&1; then
+        die "candidate image reference already exists: $candidate_ref"
+    fi
+
+    temporary=$(/usr/bin/mktemp -d "$repo/.local/plankton-image.XXXXXX")
+    trap '/usr/bin/rm -rf "$temporary"' EXIT HUP INT TERM
+    /usr/bin/git -C "$repo" -c safe.directory="$repo" archive \
+        --format=tar --output="$temporary/source.tar" "$source_commit"
+
+    if ! runtime_base_id=$(/usr/bin/docker image inspect --format '{{.Id}}' \
+        "$runtime_base_ref" 2>/dev/null); then
+        echo "building runtime base: $runtime_base_ref"
+        DOCKER_BUILDKIT=1 /usr/bin/docker build --file Dockerfile.runtime-base \
+            --tag "$runtime_base_ref" - <"$temporary/source.tar"
+        runtime_base_id=$(/usr/bin/docker image inspect --format '{{.Id}}' "$runtime_base_ref")
+    else
+        echo "reusing runtime base: $runtime_base_ref $runtime_base_id"
+    fi
+    valid_id "$runtime_base_id" || die "runtime base has an invalid image ID"
+
+    echo "building candidate: $candidate_ref"
+    DOCKER_BUILDKIT=1 /usr/bin/docker build --file Dockerfile \
+        --build-arg "PLANKTON_RUNTIME_BASE=$runtime_base_ref" \
+        --build-arg "PLANKTON_RUNTIME_BASE_ID=$runtime_base_id" \
+        --build-arg "PLANKTON_SOURCE_COMMIT=$source_commit" \
+        --tag "$candidate_ref" - <"$temporary/source.tar"
+    candidate_id=$(/usr/bin/docker image inspect --format '{{.Id}}' "$candidate_ref")
+    candidate_user=$(/usr/bin/docker image inspect --format '{{.Config.User}}' "$candidate_ref")
+    candidate_created=$(/usr/bin/docker image inspect --format '{{.Created}}' "$candidate_ref")
+    [ "$candidate_user" = 10001:10001 ] || die "candidate configured user is $candidate_user"
+    write_candidate_manifest "$manifest"
+    verify_live_candidate "$manifest"
+    echo "manifest=$manifest"
+    inspect_candidate "$manifest"
+}
+
+inspect_candidate() {
+    [ "$#" -eq 1 ] || usage
+    verify_live_candidate "$1"
+    echo "source=$candidate_source"
+    echo "release_id=$candidate_release"
+    echo "base_ref=$runtime_base_ref base_id=$runtime_base_id lock_sha256=$runtime_lock_sha"
+    /usr/bin/docker image inspect \
+        --format 'tags={{json .RepoTags}} id={{.Id}} user={{.Config.User}} created={{.Created}}' \
+        "$candidate_ref"
+}
+
+install_test() {
+    [ "$#" -eq 1 ] || usage
+    [ "$(/usr/bin/id -u)" -eq 0 ] || die "install-test must run as root"
+    require_exact_main
+    verify_live_candidate "$1"
+    [ "$source_commit" = "$candidate_source" ] || die "manifest source is not exact origin/main"
+    if /usr/bin/systemctl is-active --quiet plankton-platform-test.service; then
+        die "PICASSO Test is active"
+    fi
+
+    releases=/opt/plankton-inference/releases
+    release_directory=$releases/$candidate_release
+    [ ! -e "$release_directory" ] || die "candidate release already exists: $candidate_release"
+    /usr/bin/install -d -o root -g root -m 0755 "$releases"
+    temporary_release=$releases/.${candidate_release}.$$
+    temporary=$(/usr/bin/mktemp -d /tmp/plankton-candidate.XXXXXX)
+    trap '/usr/bin/rm -rf "$temporary" "$temporary_release"' EXIT HUP INT TERM
+    /usr/bin/git -C "$repo" -c safe.directory="$repo" archive \
+        --format=tar --output="$temporary/source.tar" "$source_commit"
+    /usr/bin/mkdir "$temporary_release"
+    /usr/bin/tar -xf "$temporary/source.tar" -C "$temporary_release"
+    /usr/bin/install -m 0644 "$1" "$temporary_release/candidate.env"
+    {
+        echo "PLANKTON_IMAGE_REF=$candidate_ref"
+        echo "PLANKTON_IMAGE_ID=$candidate_id"
+        echo "PLANKTON_RUNTIME_BASE_REF=$runtime_base_ref"
+        echo "PLANKTON_RUNTIME_BASE_ID=$runtime_base_id"
+        echo "PLANKTON_SOURCE_COMMIT=$candidate_source"
+    } >"$temporary_release/release.env"
+    /usr/bin/chown -R root:root "$temporary_release"
+    /usr/bin/mv "$temporary_release" "$release_directory"
+
+    /usr/bin/install -d -o root -g plankton-inference -m 0750 \
+        /var/lib/plankton-inference-test
+    /usr/bin/install -d -o plankton-app -g plankton-inference -m 2770 \
+        "/var/lib/plankton-inference-test/$candidate_release"
+    state_link=/var/lib/.plankton-inference-test-current.$$
+    /usr/bin/ln -s "plankton-inference-test/$candidate_release" "$state_link"
+    /usr/bin/mv -Tf "$state_link" /var/lib/plankton-inference-test-current
+    temporary_link=/opt/plankton-inference/.test-current.$$
+    /usr/bin/ln -s "releases/$candidate_release" "$temporary_link"
+    /usr/bin/mv -Tf "$temporary_link" /opt/plankton-inference/test-current
+    /usr/bin/install -d -o root -g root -m 0755 /etc/plankton-inference
+    config_tmp=/etc/plankton-inference/.test.env.$$
+    /usr/bin/printf 'PLANKTON_TEST_RELEASE_ID=%s\n' "$candidate_release" >"$config_tmp"
+    /usr/bin/chmod 0600 "$config_tmp"
+    /usr/bin/mv "$config_tmp" /etc/plankton-inference/test.env
+    trap - EXIT HUP INT TERM
+    /usr/bin/rm -rf "$temporary"
+    echo "installed PICASSO Test candidate: $candidate_release $candidate_id"
+}
+
+promote_candidate() {
+    [ "$#" -eq 3 ] || usage
+    manifest=$1
+    release_ref=$2
+    output=$3
+    verify_live_candidate "$manifest"
+    valid_ref "$release_ref" || die "invalid release image reference"
+    [ "$release_ref" != "$candidate_ref" ] || die "release reference must be unique"
+    if /usr/bin/docker image inspect "$release_ref" >/dev/null 2>&1; then
+        die "release image reference already exists: $release_ref"
+    fi
+    [ ! -e "$output" ] || die "release environment already exists: $output"
+    output_directory=$(/usr/bin/dirname "$output")
+    [ -d "$output_directory" ] && [ -w "$output_directory" ] || \
+        die "release environment directory is not writable: $output_directory"
+    /usr/bin/docker tag "$candidate_ref" "$release_ref"
+    release_id=$(/usr/bin/docker image inspect --format '{{.Id}}' "$release_ref")
+    [ "$release_id" = "$candidate_id" ] || die "promotion changed the candidate image ID"
+    temporary=${output}.tmp.$$
+    umask 077
+    {
+        echo "PLANKTON_IMAGE_REF=$release_ref"
+        echo "PLANKTON_IMAGE_ID=$candidate_id"
+        echo "PLANKTON_RUNTIME_BASE_REF=$runtime_base_ref"
+        echo "PLANKTON_RUNTIME_BASE_ID=$runtime_base_id"
+        echo "PLANKTON_SOURCE_COMMIT=$candidate_source"
+    } >"$temporary"
+    /usr/bin/mv "$temporary" "$output"
+    echo "promoted_without_rebuild=true"
+    echo "candidate_ref=$candidate_ref release_ref=$release_ref image_id=$candidate_id"
+    echo "release_env=$output"
+}
+
+command=${1:-}
+[ "$#" -gt 0 ] || usage
+shift
+case "$command" in
+    build) build_candidate "$@" ;;
+    inspect) inspect_candidate "$@" ;;
+    install-test) install_test "$@" ;;
+    promote) promote_candidate "$@" ;;
+    *) usage ;;
+esac

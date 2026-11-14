@@ -1,0 +1,41 @@
+[Unit]
+Description=Plankton USB mount broker (narrow root helper)
+After=udisks2.service
+Wants=udisks2.service
+Before=plankton-usb-host.service plankton-usb-host-test.service plankton-usb-host-root.service
+
+[Service]
+Type=simple
+User=root
+Group=plankton-inference
+UMask=0007
+RuntimeDirectory=plankton-inference
+RuntimeDirectoryMode=2770
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/bin/python3 /usr/local/libexec/plankton-usb-mount-broker.py
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=true
+# Native handoff and unmount happen in the host namespace. Exclusive mounts
+# execute in the requesting USB-agent mount namespace, authenticated by
+# SO_PEERCRED and a kernel-passed namespace FD; there is no caller-supplied
+# namespace target or command.
+PrivateMounts=no
+PrivateTmp=no
+ProtectHome=false
+ProtectSystem=off
+# The broker remains host-visible for UDisks/native mount operations; its
+# mount authority is bounded to the authenticated peer namespace.
+ProtectKernelTunables=no
+ProtectControlGroups=no
+ProtectKernelLogs=no
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_SETGID CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_CHOWN
+# ntfs-3g drops supplementary groups before mounting; retain only this required
+# group-management capability in the fixed helper child.
+AmbientCapabilities=CAP_SYS_ADMIN CAP_SYS_CHROOT CAP_SETGID
+
+[Install]
+WantedBy=multi-user.target

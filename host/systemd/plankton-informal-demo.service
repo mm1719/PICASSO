@@ -1,0 +1,20 @@
+[Unit]
+Description=Plankton informal demo API and worker
+Requires=docker.service plankton-demo-usb.service plankton-usb-host.service
+After=docker.service plankton-demo-usb.service plankton-usb-host.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/plankton-inference/current
+ExecStartPre=/bin/sh -c '! /usr/bin/systemctl is-active --quiet plankton-platform.service'
+ExecStartPre=/bin/sh -c '! /usr/bin/systemctl is-active --quiet plankton-platform-test.service'
+EnvironmentFile=/etc/plankton-inference/platform.env
+EnvironmentFile=/etc/plankton-inference/informal-demo.env
+Environment=PLANKTON_ENV_FILE=/etc/plankton-inference/platform.env
+ExecStartPre=/usr/local/sbin/plankton-informal-demo verify
+ExecStart=/usr/bin/docker compose -f compose.yaml -f compose.informal-demo.yaml up --no-build --remove-orphans
+ExecStop=/usr/bin/docker compose -f compose.yaml -f compose.informal-demo.yaml down
+TimeoutStartSec=0
+TimeoutStopSec=120
+Restart=on-failure
+RestartSec=5s

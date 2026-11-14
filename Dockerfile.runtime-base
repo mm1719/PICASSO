@@ -1,0 +1,24 @@
+# syntax=docker/dockerfile:1.7
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    TRITON_CACHE_DIR=/var/lib/plankton-inference/torch-cache/triton
+WORKDIR /opt/plankton-inference
+
+COPY requirements/runtime.lock ./requirements/runtime.lock
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=cache,target=/root/.cache/pip \
+    python -m pip install --upgrade pip==26.2.1 setuptools==83.0.0 \
+    && python -m pip install --requirement requirements/runtime.lock
+
+RUN groupadd --gid 10001 plankton \
+    && useradd --uid 10001 --gid plankton --no-create-home --shell /usr/sbin/nologin plankton \
+    && mkdir -p /var/lib/plankton-inference /run/plankton-inference \
+    && chown -R plankton:plankton /var/lib/plankton-inference /run/plankton-inference \
+    && chmod 2770 /var/lib/plankton-inference /run/plankton-inference
+
+USER 10001:10001

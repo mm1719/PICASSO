@@ -1,0 +1,71 @@
+#!/bin/sh
+set -eu
+
+dedicated=plankton-usb-host.service
+fallback=plankton-usb-host-root.service
+active_job=/run/plankton-inference/active-job
+test_platform=plankton-platform-test.service
+
+usage() {
+    echo "usage: plankton-usb-host-mode status | [emergency] dedicated <reason> | [emergency] root-fallback <reason>" >&2
+    exit 2
+}
+
+mode=${1:-}
+if [ "$mode" = status ]; then
+    dedicated_state=$(/usr/bin/systemctl is-active "$dedicated" 2>/dev/null || true)
+    fallback_state=$(/usr/bin/systemctl is-active "$fallback" 2>/dev/null || true)
+    echo "dedicated=${dedicated_state:-unknown}"
+    echo "root-fallback=${fallback_state:-unknown}"
+    exit 0
+fi
+
+[ "$(/usr/bin/id -u)" -eq 0 ] || { echo "must run as root" >&2; exit 1; }
+
+emergency=false
+if [ "$mode" = emergency ]; then
+    emergency=true
+    shift
+    mode=${1:-}
+fi
+shift
+[ "$#" -gt 0 ] || usage
+reason=$*
+
+/usr/bin/logger -t plankton-usb-host-mode -- \
+    "result=attempted mode=$mode emergency=$emergency reason=$reason"
+if [ -e "$active_job" ] && [ "$emergency" != true ]; then
+    /usr/bin/logger -t plankton-usb-host-mode -- \
+        "result=refused mode=$mode emergency=false reason=$reason"
+    echo "an inference job is active; use an explicit emergency override only for an incident" >&2
+    exit 1
+fi
+if /usr/bin/systemctl is-active --quiet "$test_platform"; then
+    echo "PICASSO Test is active; restore production before switching its USB profile" >&2
+    exit 1
+fi
+
+case "$mode" in
+    dedicated)
+        previous=$fallback
+        target=$dedicated
+        ;;
+    root-fallback)
+        previous=$dedicated
+        target=$fallback
+        ;;
+    *)
+        usage
+        ;;
+esac
+
+if /usr/bin/systemctl stop "$previous" \
+    && /usr/bin/systemctl start "$target" \
+    && /usr/bin/systemctl is-active --quiet "$target"; then
+    /usr/bin/logger -t plankton-usb-host-mode -- \
+        "result=completed mode=$mode emergency=$emergency reason=$reason"
+else
+    /usr/bin/logger -t plankton-usb-host-mode -- \
+        "result=failed mode=$mode emergency=$emergency reason=$reason"
+    exit 1
+fi

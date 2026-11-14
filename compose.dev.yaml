@@ -1,0 +1,35 @@
+# Explicit development-only overlay. Formal systemd units use compose.yaml only.
+services:
+  api:
+    environment:
+      PYTHONPATH: /opt/plankton-inference/apps/api:/opt/plankton-inference/apps/worker:/opt/plankton-inference/packages/control:/opt/plankton-inference/packages/core:/opt/plankton-inference/packages/inference:/opt/plankton-inference/packages/simulator
+    volumes:
+      - type: bind
+        source: ./apps/api
+        target: /opt/plankton-inference/apps/api
+        read_only: true
+      - type: bind
+        source: ./apps/worker
+        target: /opt/plankton-inference/apps/worker
+        read_only: true
+      - type: bind
+        source: ./packages
+        target: /opt/plankton-inference/packages
+        read_only: true
+
+  worker:
+    environment:
+      PYTHONPATH: /opt/plankton-inference/apps/api:/opt/plankton-inference/apps/worker:/opt/plankton-inference/packages/control:/opt/plankton-inference/packages/core:/opt/plankton-inference/packages/inference:/opt/plankton-inference/packages/simulator
+    volumes:
+      - type: bind
+        source: ./apps/api
+        target: /opt/plankton-inference/apps/api
+        read_only: true
+      - type: bind
+        source: ./apps/worker
+        target: /opt/plankton-inference/apps/worker
+        read_only: true
+      - type: bind
+        source: ./packages
+        target: /opt/plankton-inference/packages
+        read_only: true

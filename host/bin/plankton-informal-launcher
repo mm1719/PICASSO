@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+/usr/bin/sudo /usr/local/sbin/plankton-operator informal start
+
+url=http://127.0.0.1:18080/
+i=0
+while [ "$i" -lt 60 ]; do
+    if /usr/bin/curl --silent --fail --max-time 2 "${url}api/v1/health" >/dev/null 2>&1; then
+        break
+    fi
+    i=$((i + 1))
+    /usr/bin/sleep 1
+done
+
+/usr/bin/nohup /usr/local/sbin/plankton-web-app "$url" \
+    >/tmp/plankton-picasso-web.log 2>&1 </dev/null &

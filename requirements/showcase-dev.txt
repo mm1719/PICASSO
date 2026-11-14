@@ -1,0 +1,3 @@
+# Small CPU-only test environment, separate from inference dependencies.
+pytest==9.0.3
+pillow==12.2.0

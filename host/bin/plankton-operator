@@ -1,0 +1,42 @@
+#!/usr/bin/dash
+set -eu
+
+usage() {
+    echo "usage: plankton-operator runtime <production|test|status> | informal <start|stop|status> | demo-usb <attach|detach|status>" >&2
+    exit 2
+}
+
+die() { echo "plankton-operator: $*" >&2; exit 1; }
+
+[ "$(/usr/bin/id -u)" -eq 0 ] || die "must run as root"
+[ "$#" -eq 2 ] || usage
+
+area=$1
+operation=$2
+audit() {
+    /usr/bin/logger -t plankton-operator -- "caller_uid=${SUDO_UID:-${PKEXEC_UID:-root}} action=$area/$operation result=$1"
+}
+
+run() {
+    audit started
+    if "$@"; then
+        audit completed
+    else
+        status=$?
+        audit "failed_exit_$status"
+        exit "$status"
+    fi
+}
+
+case "$area/$operation" in
+    runtime/production) run /usr/local/sbin/plankton-test-session production "desktop operator" ;;
+    runtime/test) run /usr/local/sbin/plankton-test-session test "desktop operator" ;;
+    runtime/status) run /usr/local/sbin/plankton-test-session status ;;
+    informal/start) run /usr/local/sbin/plankton-informal-demo start ;;
+    informal/stop) run /usr/local/sbin/plankton-informal-demo stop ;;
+    informal/status) run /usr/local/sbin/plankton-informal-demo status ;;
+    demo-usb/attach) run /usr/bin/systemctl start plankton-demo-usb.service ;;
+    demo-usb/detach) run /usr/bin/systemctl stop plankton-demo-usb.service ;;
+    demo-usb/status) run /usr/bin/systemctl status --no-pager plankton-demo-usb.service ;;
+    *) usage ;;
+esac

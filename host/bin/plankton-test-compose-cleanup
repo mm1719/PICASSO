@@ -1,0 +1,62 @@
+#!/usr/bin/python3
+"""Converge only the PICASSO Test Compose project after its up process exits."""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+import time
+from collections.abc import Callable, Sequence
+
+PROJECT = "plankton-inference-test"
+COMPOSE = ("/usr/bin/docker", "compose", "-p", PROJECT, "-f", "compose.yaml", "-f", "compose.test.yaml")
+
+
+def reconcile(
+    run: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
+    *,
+    timeout: float = 30.0,
+    quiet_checks: int = 3,
+) -> None:
+    """Run project-scoped down until no containers remain across consecutive checks."""
+    deadline = monotonic() + timeout
+    quiet = 0
+    while monotonic() < deadline:
+        remaining = deadline - monotonic()
+        run((*COMPOSE, "down", "--remove-orphans"), check=True, timeout=min(10.0, remaining))
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            break
+        result = run(
+            ("/usr/bin/docker", "ps", "--all", "--quiet", "--filter", f"label=com.docker.compose.project={PROJECT}"),
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=min(10.0, remaining),
+        )
+        if result.stdout.strip():
+            quiet = 0
+        else:
+            quiet += 1
+            if quiet >= quiet_checks:
+                return
+        sleep(min(0.5, max(0.0, deadline - monotonic())))
+    raise RuntimeError("PICASSO Test Compose cleanup did not converge")
+
+
+def main(argv: Sequence[str]) -> int:
+    if argv:
+        print("usage: plankton-test-compose-cleanup", file=sys.stderr)
+        return 2
+    try:
+        reconcile()
+    except (OSError, subprocess.SubprocessError, RuntimeError) as error:
+        print(f"plankton-test-compose-cleanup: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

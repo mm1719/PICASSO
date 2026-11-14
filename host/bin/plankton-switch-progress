@@ -1,0 +1,54 @@
+#!/usr/bin/python3
+"""Centered, non-interactive progress window for PICASSO runtime switching."""
+
+from __future__ import annotations
+
+import signal
+import sys
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import GLib, Gtk
+
+
+def main() -> int:
+    title = sys.argv[1] if len(sys.argv) == 2 else "PICASSO"
+    if len(sys.argv) > 2:
+        raise SystemExit("usage: plankton-switch-progress [PICASSO|PICASSO Test]")
+
+    window = Gtk.Window(title=title)
+    window.set_modal(True)
+    window.set_deletable(False)
+    window.set_resizable(False)
+    window.set_default_size(520, 180)
+    window.set_position(Gtk.WindowPosition.CENTER)
+    window.connect("destroy", Gtk.main_quit)
+
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+    box.set_border_width(24)
+    window.add(box)
+
+    label = Gtk.Label(label=f"Starting {title}; switching runtime...")
+    label.set_xalign(0.0)
+    label.set_line_wrap(True)
+    box.pack_start(label, False, False, 0)
+
+    progress = Gtk.ProgressBar()
+    progress.set_pulse_step(0.08)
+    box.pack_start(progress, False, False, 0)
+
+    def stop(_signum: int, _frame: object) -> None:
+        Gtk.main_quit()
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    window.show_all()
+    window.present()
+    GLib.timeout_add(100, lambda: (progress.pulse() or True))
+    Gtk.main()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

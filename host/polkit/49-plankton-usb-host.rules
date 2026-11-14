@@ -1,0 +1,62 @@
+polkit.addRule(function (action, subject) {
+    var mountActions = [
+        "org.freedesktop.udisks2.filesystem-mount",
+        "org.freedesktop.udisks2.filesystem-mount-system",
+        "org.freedesktop.udisks2.filesystem-mount-other-seat",
+        "org.freedesktop.udisks2.filesystem-mount-other-user",
+        "org.freedesktop.udisks2.filesystem-fstab"
+    ];
+    if (mountActions.indexOf(action.id) === -1) {
+        return polkit.Result.NOT_HANDLED;
+    }
+    var device = action.lookup("device");
+    if (!device) {
+        return polkit.Result.NOT_HANDLED;
+    }
+    try {
+        if (polkit.spawn([
+            "/usr/local/sbin/plankton-udisks-mount-guard",
+            device
+        ]).trim() === "deny") {
+            polkit.log("denied desktop mount for Plankton-owned device " + device);
+            return polkit.Result.NO;
+        }
+    } catch (error) {
+        // An incomplete installation must not disable UDisks globally; the
+        // installer places the fixed helper before reloading this rule.
+        polkit.log("Plankton mount guard unavailable: " + error);
+    }
+    return polkit.Result.NOT_HANDLED;
+});
+
+polkit.addRule(function (action, subject) {
+    var allowed = [
+        "org.freedesktop.udisks2.filesystem-mount",
+        "org.freedesktop.udisks2.filesystem-mount-other-seat",
+        "org.freedesktop.udisks2.filesystem-unmount-others",
+        "org.freedesktop.udisks2.power-off-drive",
+        "org.freedesktop.udisks2.power-off-drive-other-seat"
+    ];
+
+    if (subject.user !== "plankton-usb" || allowed.indexOf(action.id) === -1) {
+        return polkit.Result.NOT_HANDLED;
+    }
+    if (action.lookup("drive.removable") !== "true") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    return polkit.Result.YES;
+});
+
+polkit.addRule(function (action, subject) {
+    var inhibitorActions = [
+        "org.freedesktop.login1.inhibit-block-shutdown",
+        "org.freedesktop.login1.inhibit-block-sleep",
+        // systemd 255 checks this unrelated action for multi-value inhibitors.
+        "org.freedesktop.login1.inhibit-handle-lid-switch"
+    ];
+    // Keep the fixed service UID as a narrow fallback when NSS subject names drift.
+    if ((subject.user === "plankton-app" || subject.uid === 10001) &&
+        inhibitorActions.indexOf(action.id) !== -1) {
+        return polkit.Result.YES;
+    }
+});

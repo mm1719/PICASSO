@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plankton-inference-core"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[project.optional-dependencies]
+dev = [
+    "httpx2==2.7.0",
+    "mutmut==2.5.1",
+    "mypy==2.3.0",
+    "pytest==9.1.1",
+    "pytest-bdd==8.1.0",
+    "pytest-cov==7.0.0",
+    "ruff==0.16.1",
+]
+control = [
+    "fastapi==0.141.1",
+    "uvicorn==0.52.0",
+]
+inference = [
+    "pillow==12.3.0",
+    "timm==1.0.26",
+    "torch==2.13.0",
+    "torchvision==0.28.0",
+]
+
+[tool.setuptools.packages.find]
+where = [
+    "apps/api",
+    "apps/worker",
+    "packages/control",
+    "packages/core",
+    "packages/inference",
+    "packages/simulator",
+    "host/usb_agent",
+]
+
+[tool.pytest.ini_options]
+pythonpath = [
+    "apps/api",
+    "apps/worker",
+    "packages/control",
+    "packages/core",
+    "packages/simulator",
+    "host/usb_agent",
+]
+testpaths = ["tests/unit", "tests/whitebox"]
+markers = ["gpu: reserved for separately approved GPU validation; excluded from this source snapshot"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["apps/api", "apps/worker", "packages", "host", "tests/unit", "tests/whitebox"]
+explicit_package_bases = true
+mypy_path = [
+    "apps/api",
+    "apps/worker",
+    "packages/control",
+    "packages/core",
+    "packages/inference",
+    "packages/simulator",
+    "host/usb_agent",
+]
+
+[[tool.mypy.overrides]]
+module = ["torchvision", "torchvision.*"]
+ignore_missing_imports = true

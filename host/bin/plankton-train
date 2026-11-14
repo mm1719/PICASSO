@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+usage() {
+    echo "usage: plankton-train -- <training-command> [args...]" >&2
+    exit 2
+}
+
+die() {
+    echo "plankton-train: $*" >&2
+    exit 1
+}
+
+[ "${1:-}" = "--" ] || usage
+shift
+[ "$#" -gt 0 ] || usage
+
+lock_path=${PLANKTON_GPU_LOCK_PATH:-/run/plankton-inference/gpu.lock}
+case "$lock_path" in
+    /*) ;;
+    *) die "PLANKTON_GPU_LOCK_PATH must be absolute" ;;
+esac
+lock_directory=$(/usr/bin/dirname -- "$lock_path")
+[ -d "$lock_directory" ] || die "lock directory does not exist: $lock_directory"
+[ -x /usr/bin/flock ] || die "required executable is unavailable: /usr/bin/flock"
+
+umask 0007
+exec /usr/bin/flock --exclusive --no-fork "$lock_path" "$@"

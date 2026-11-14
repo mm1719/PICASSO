@@ -1,0 +1,33 @@
+#!/usr/bin/python3
+"""Answer exact-device UDisks mount admission checks for the Polkit rule."""
+
+from __future__ import annotations
+
+import hashlib
+import re
+import sys
+from pathlib import Path
+
+MOUNT_GUARD_DIR = Path("/run/plankton-usb-mount-guard")
+BLOCK_DEVICE = re.compile(r"^/dev/[A-Za-z0-9._-]+$")
+
+
+def is_owned(block: str) -> bool:
+    if not BLOCK_DEVICE.fullmatch(block):
+        return False
+    marker = MOUNT_GUARD_DIR / hashlib.sha256(block.encode("ascii")).hexdigest()
+    try:
+        return marker.is_file() and not marker.is_symlink()
+    except OSError:
+        return False
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 2:
+        return 2
+    print("deny" if is_owned(argv[1]) else "allow")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv))

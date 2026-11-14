@@ -1,0 +1,18 @@
+[Unit]
+Description=Block shutdown and sleep while a Plankton inference job is active
+ConditionPathExists=/run/plankton-inference/active-job
+
+[Service]
+Type=simple
+User=plankton-app
+Group=plankton-inference
+ExecStart=/usr/bin/systemd-inhibit --what=shutdown:sleep --who=plankton-inference --why=active-inference-job --mode=block /bin/sh -c 'while test -e /run/plankton-inference/active-job; do /usr/bin/sleep 2; done'
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=

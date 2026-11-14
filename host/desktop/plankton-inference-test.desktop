@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=PICASSO Test
+Comment=Open the verified production-equivalent PICASSO candidate
+Exec=/usr/local/sbin/plankton-desktop-launcher test
+Icon=applications-science
+Terminal=false
+StartupWMClass=PICASSO-Test
+Categories=Science;
+StartupNotify=true

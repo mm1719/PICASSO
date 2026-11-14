@@ -1,0 +1,41 @@
+#!/bin/sh
+set -eu
+
+config=/etc/plankton-inference/informal-demo.env
+service=plankton-informal-demo.service
+
+usage() {
+    echo "usage: plankton-informal-demo verify | start | stop | status" >&2
+    exit 2
+}
+
+die() { echo "plankton-informal-demo: $*" >&2; exit 1; }
+
+[ "$(/usr/bin/id -u)" -eq 0 ] || die "must run as root"
+[ -r "$config" ] || die "missing configuration: $config"
+# shellcheck disable=SC1090
+. "$config"
+
+verify() {
+    : "${PLANKTON_IMAGE_REF:?set PLANKTON_IMAGE_REF}"
+    : "${PLANKTON_IMAGE_ID:?set PLANKTON_IMAGE_ID}"
+    case "$PLANKTON_IMAGE_REF" in
+        *[!A-Za-z0-9./:@_-]*|"") die "invalid PLANKTON_IMAGE_REF" ;;
+    esac
+    case "$PLANKTON_IMAGE_ID" in sha256:*) ;; *) die "invalid PLANKTON_IMAGE_ID" ;; esac
+    digest=${PLANKTON_IMAGE_ID#sha256:}
+    [ "${#digest}" -eq 64 ] && [ "${digest#*[!0-9a-f]}" = "$digest" ] || \
+        die "invalid PLANKTON_IMAGE_ID"
+    actual=$(/usr/bin/docker image inspect --format '{{.Id}}' "$PLANKTON_IMAGE_REF" 2>/dev/null) || \
+        die "image is absent: $PLANKTON_IMAGE_REF"
+    [ "$actual" = "$PLANKTON_IMAGE_ID" ] || \
+        die "image identity mismatch: $PLANKTON_IMAGE_REF"
+}
+
+case ${1:-} in
+    verify) [ "$#" -eq 1 ] || usage; verify; echo "verified: $PLANKTON_IMAGE_REF $PLANKTON_IMAGE_ID" ;;
+    start) [ "$#" -eq 1 ] || usage; verify; /usr/bin/systemctl start "$service" ;;
+    stop) [ "$#" -eq 1 ] || usage; /usr/bin/systemctl stop "$service" ;;
+    status) [ "$#" -eq 1 ] || usage; /usr/bin/systemctl status --no-pager "$service" ;;
+    *) usage ;;
+esac

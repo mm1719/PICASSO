@@ -1,0 +1,259 @@
+#!/bin/sh
+set -eu
+
+release_root=/opt/plankton-inference
+releases=$release_root/releases
+test_current=$release_root/test-current
+config=/etc/plankton-inference/test.env
+production=plankton-platform.service
+test_service=plankton-platform-test.service
+dedicated=plankton-usb-host.service
+fallback=plankton-usb-host-root.service
+test_usb=plankton-usb-host-test.service
+active_job=/run/plankton-inference/active-job
+switch_lock=/run/plankton-inference/runtime-switch.lock
+previous_usb=/run/plankton-inference/test-previous-usb-profile
+
+usage() {
+    echo "usage: plankton-test-session verify | status | test <reason> | production <reason>" >&2
+    exit 2
+}
+
+die() { echo "plankton-test-session: $*" >&2; exit 1; }
+
+value() {
+    key=$1
+    file=$2
+    count=$(/usr/bin/sed -n "/^${key}=/p" "$file" | /usr/bin/wc -l)
+    [ "$count" -eq 1 ] || die "$file must contain exactly one $key"
+    /usr/bin/sed -n "s/^${key}=//p" "$file"
+}
+
+valid_id() {
+    case "$1" in sha256:*) ;; *) return 1 ;; esac
+    digest=${1#sha256:}
+    [ "${#digest}" -eq 64 ] && [ "${digest#*[!0-9a-f]}" = "$digest" ]
+}
+
+release_from_test_link() {
+    target=$(/usr/bin/readlink -f "$test_current" 2>/dev/null || true)
+    [ "$target" = "$releases/$PLANKTON_TEST_RELEASE_ID" ] || return 1
+    echo "$target"
+}
+
+load_candidate() {
+    [ -r "$config" ] || die "missing configuration: $config"
+    PLANKTON_TEST_RELEASE_ID=$(value PLANKTON_TEST_RELEASE_ID "$config")
+    case "$PLANKTON_TEST_RELEASE_ID" in
+        ""|*[!A-Za-z0-9._-]*) die "invalid PLANKTON_TEST_RELEASE_ID" ;;
+    esac
+    directory=$(release_from_test_link) || die "test-current does not match configured candidate"
+    [ -f "$directory/compose.yaml" ] && [ -f "$directory/compose.test.yaml" ] || \
+        die "candidate Compose files are unavailable"
+    [ -f "$directory/release.env" ] && [ -f "$directory/candidate.env" ] || \
+        die "candidate identity files are unavailable"
+
+    image_ref=$(value PLANKTON_IMAGE_REF "$directory/release.env")
+    image_id=$(value PLANKTON_IMAGE_ID "$directory/release.env")
+    candidate_ref=$(value PLANKTON_CANDIDATE_IMAGE_REF "$directory/candidate.env")
+    candidate_id=$(value PLANKTON_CANDIDATE_IMAGE_ID "$directory/candidate.env")
+    source_commit=$(value PLANKTON_CANDIDATE_SOURCE_COMMIT "$directory/candidate.env")
+    [ "$image_ref" = "$candidate_ref" ] && [ "$image_id" = "$candidate_id" ] || \
+        die "candidate and release image identity differ"
+    valid_id "$image_id" || die "invalid candidate image ID"
+    actual=$(/usr/bin/docker image inspect --format '{{.Id}}' "$image_ref" 2>/dev/null) || \
+        die "candidate image is absent: $image_ref"
+    [ "$actual" = "$image_id" ] || die "candidate image identity mismatch: $image_ref"
+    revision=$(/usr/bin/docker image inspect \
+        --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image_ref")
+    [ "$revision" = "$source_commit" ] || die "candidate source label mismatch"
+}
+
+healthy() {
+    mode=$1
+    case "$mode" in
+        production)
+            service=$production; project=plankton-inference; port=8000
+            if ! /usr/bin/systemctl is-active --quiet "$dedicated" && \
+                ! /usr/bin/systemctl is-active --quiet "$fallback"; then return 1; fi
+            ;;
+        test)
+            service=$test_service; project=plankton-inference-test; port=18080
+            /usr/bin/systemctl is-active --quiet "$test_usb" || return 1
+            ;;
+        *) return 1 ;;
+    esac
+    /usr/bin/systemctl is-active --quiet "$service" || return 1
+    [ -n "$(/usr/bin/docker ps --quiet --filter label=com.docker.compose.project="$project" \
+        --filter label=com.docker.compose.service=api --filter status=running)" ] || return 1
+    [ -n "$(/usr/bin/docker ps --quiet --filter label=com.docker.compose.project="$project" \
+        --filter label=com.docker.compose.service=worker --filter status=running)" ] || return 1
+    /usr/bin/curl --fail --silent --show-error --max-time 2 \
+        "http://127.0.0.1:${port}/api/v1/health" >/dev/null
+}
+
+wait_healthy() {
+    mode=$1
+    attempt=0
+    while [ "$attempt" -lt 60 ]; do
+        healthy "$mode" && return 0
+        attempt=$((attempt + 1))
+        /usr/bin/sleep 1
+    done
+    return 1
+}
+
+active_production_usb() {
+    if /usr/bin/systemctl is-active --quiet "$fallback"; then
+        echo "$fallback"
+    else
+        echo "$dedicated"
+    fi
+}
+
+restore_production_usb() {
+    profile=$dedicated
+    if [ -r "$previous_usb" ]; then
+        recorded=$(/usr/bin/sed -n '1p' "$previous_usb")
+        case "$recorded" in "$dedicated"|"$fallback") profile=$recorded ;; esac
+    fi
+    /usr/bin/systemctl stop "$test_usb"
+    /usr/bin/systemctl start "$profile"
+}
+
+stop_test_runtime() {
+    stop_status=0
+    /usr/bin/systemctl stop "$test_service" 2>/dev/null || stop_status=$?
+    /usr/bin/systemctl reset-failed "$test_service" 2>/dev/null || true
+    [ "$stop_status" -eq 0 ] || return 1
+    /usr/bin/systemctl is-active --quiet "$test_service" && return 1
+    [ -z "$(/usr/bin/docker ps --all --quiet --filter label=com.docker.compose.project=plankton-inference-test)" ]
+}
+
+require_idle_switch() {
+    [ ! -e "$active_job" ] || die "an inference job is active"
+    if /usr/bin/systemctl is-active --quiet plankton-informal-demo.service; then
+        die "the informal demo runtime is active"
+    fi
+    platform_env=/etc/plankton-inference/platform.env
+    gpu_lock=/run/plankton-inference/gpu.lock
+    if [ -r "$platform_env" ]; then
+        configured=$(/usr/bin/sed -n 's/^PLANKTON_GPU_LOCK_PATH=//p' "$platform_env")
+        [ -z "$configured" ] || gpu_lock=$configured
+    fi
+    if [ -e "$gpu_lock" ] && ! /usr/bin/flock --exclusive --nonblock "$gpu_lock" /usr/bin/true; then
+        die "the GPU lock is owned by training or inference"
+    fi
+}
+
+audit() {
+    /usr/bin/logger -t plankton-test-session -- "mode=$1 result=$2 reason=$3"
+}
+
+start_test() {
+    reason=$1
+    load_candidate
+    if healthy test; then
+        echo "PICASSO Test is healthy"
+        return
+    fi
+    require_idle_switch
+    production_was_active=false
+    if /usr/bin/systemctl is-active --quiet "$production"; then
+        production_was_active=true
+    fi
+    audit test attempted "$reason"
+    profile=$(active_production_usb)
+    /usr/bin/printf '%s\n' "$profile" >"$previous_usb"
+    if /usr/bin/systemctl stop "$production" \
+        && /usr/bin/systemctl stop "$dedicated" "$fallback" \
+        && /usr/bin/systemctl start "$test_usb" \
+        && /usr/bin/systemctl start "$test_service" \
+        && wait_healthy test; then
+        audit test completed "$reason"
+        echo "PICASSO Test is healthy"
+        return
+    fi
+
+    test_cleanup_ok=true
+    stop_test_runtime || test_cleanup_ok=false
+    /usr/bin/systemctl stop "$test_usb" 2>/dev/null || true
+    audit test health_failed "$reason"
+    restore_production_usb || die "candidate failed and the production USB profile could not be restored"
+    if [ "$production_was_active" = true ]; then
+        /usr/bin/systemctl start "$production"
+        wait_healthy production || die "candidate and automatic production restore both failed"
+        audit production restored_after_test_failure "$reason"
+    fi
+    /usr/bin/rm -f "$previous_usb"
+    [ "$test_cleanup_ok" = true ] || die "production restored, but Test cleanup did not converge"
+    die "candidate health check failed; production state restored"
+}
+
+start_production() {
+    reason=$1
+    if healthy production; then
+        /usr/bin/rm -f "$previous_usb"
+        echo "PICASSO production is healthy"
+        return
+    fi
+    require_idle_switch
+    test_was_active=false
+    if healthy test; then
+        test_was_active=true
+    fi
+    audit production attempted "$reason"
+    if stop_test_runtime \
+        && restore_production_usb \
+        && /usr/bin/systemctl start "$production" \
+        && wait_healthy production; then
+        /usr/bin/rm -f "$previous_usb"
+        audit production completed "$reason"
+        echo "PICASSO production is healthy"
+        return
+    fi
+
+    /usr/bin/systemctl stop "$production" 2>/dev/null || true
+    audit production health_failed "$reason"
+    if [ "$test_was_active" = true ]; then
+        [ -z "$(/usr/bin/docker ps --all --quiet --filter label=com.docker.compose.project=plankton-inference-test)" ] || \
+            die "Test cleanup did not converge; refusing to restart it"
+        load_candidate
+        if ! /usr/bin/systemctl stop "$dedicated" "$fallback" \
+            || ! /usr/bin/systemctl start "$test_usb" \
+            || ! /usr/bin/systemctl start "$test_service" \
+            || ! wait_healthy test; then
+            die "production and automatic candidate restore both failed"
+        fi
+        audit test restored_after_production_failure "$reason"
+    fi
+    die "production health check failed; previous runtime state restored"
+}
+
+command=${1:-}
+case "$command" in
+    verify)
+        [ "$#" -eq 1 ] || usage
+        [ "$(/usr/bin/id -u)" -eq 0 ] || die "must run as root"
+        load_candidate
+        echo "verified: $image_ref $image_id"
+        ;;
+    status)
+        [ "$#" -eq 1 ] || usage
+        echo "production=$(/usr/bin/systemctl is-active "$production" 2>/dev/null || true)"
+        echo "test=$(/usr/bin/systemctl is-active "$test_service" 2>/dev/null || true)"
+        echo "test_usb=$(/usr/bin/systemctl is-active "$test_usb" 2>/dev/null || true)"
+        echo "test_release=$(value PLANKTON_TEST_RELEASE_ID "$config" 2>/dev/null || echo none)"
+        ;;
+    test|production)
+        [ "$#" -ge 2 ] || usage
+        [ "$(/usr/bin/id -u)" -eq 0 ] || die "must run as root"
+        shift
+        reason=$*
+        /usr/bin/install -d -o root -g plankton-inference -m 2770 /run/plankton-inference
+        exec 9>"$switch_lock"
+        /usr/bin/flock --exclusive --nonblock 9 || die "another runtime switch is in progress"
+        if [ "$command" = test ]; then start_test "$reason"; else start_production "$reason"; fi
+        ;;
+    *) usage ;;
+esac

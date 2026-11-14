@@ -1,0 +1,22 @@
+[Unit]
+Description=Plankton inference API and worker
+Requires=docker.service
+Wants=plankton-job-inhibitor.path
+After=docker.service plankton-job-inhibitor.path
+Conflicts=plankton-platform-test.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/plankton-inference/current
+EnvironmentFile=/etc/plankton-inference/platform.env
+EnvironmentFile=/opt/plankton-inference/current/release.env
+Environment=PLANKTON_ENV_FILE=/etc/plankton-inference/platform.env
+ExecStart=/usr/bin/docker compose -f compose.yaml up --no-build --remove-orphans
+ExecStop=/usr/bin/docker compose -f compose.yaml down
+TimeoutStartSec=0
+TimeoutStopSec=120
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

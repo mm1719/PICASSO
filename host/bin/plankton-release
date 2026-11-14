@@ -1,0 +1,182 @@
+#!/bin/sh
+set -eu
+
+release_root=/opt/plankton-inference
+releases=$release_root/releases
+current=$release_root/current
+previous=$release_root/previous
+platform=plankton-platform.service
+dedicated=plankton-usb-host.service
+fallback=plankton-usb-host-root.service
+inhibitor=plankton-job-inhibitor.path
+test_platform=plankton-platform-test.service
+test_usb=plankton-usb-host-test.service
+
+usage() {
+    echo "usage: plankton-release status | activate <release-id> <reason> | rollback <reason>" >&2
+    exit 2
+}
+
+die() {
+    echo "plankton-release: $*" >&2
+    exit 1
+}
+
+release_from_link() {
+    target=$(/usr/bin/readlink -f "$1" 2>/dev/null || true)
+    case "$target" in
+        "$releases"/*)
+            release=$(/usr/bin/basename "$target")
+            [ "$target" = "$releases/$release" ] || return 1
+            echo "$release"
+            ;;
+        *) return 1 ;;
+    esac
+}
+
+validate_release() {
+    release=$1
+    case "$release" in
+        ""|*[!A-Za-z0-9._-]*) die "invalid release id: $release" ;;
+    esac
+    directory=$releases/$release
+    [ -d "$directory" ] && [ ! -L "$directory" ] || die "release is not installed: $release"
+    [ -f "$directory/compose.yaml" ] || die "release has no compose.yaml: $release"
+    [ -x "$directory/.venv-phase5/bin/python" ] || die "release has no Phase 5 environment: $release"
+    [ -f "$directory/release.env" ] || die "release has no release.env: $release"
+    image_ref=$(/usr/bin/sed -n 's/^PLANKTON_IMAGE_REF=//p' "$directory/release.env")
+    case "$image_ref" in
+        ""|*[!A-Za-z0-9./:@_-]*) die "release.env has an invalid PLANKTON_IMAGE_REF" ;;
+    esac
+    image_id=$(/usr/bin/sed -n 's/^PLANKTON_IMAGE_ID=//p' "$directory/release.env")
+    case "$image_id" in
+        sha256:*) ;;
+        *) die "release.env has an invalid PLANKTON_IMAGE_ID" ;;
+    esac
+    image_digest=${image_id#sha256:}
+    [ "${#image_digest}" -eq 64 ] || die "release.env has an invalid PLANKTON_IMAGE_ID"
+    case "$image_digest" in
+        *[!0-9a-f]*) die "release.env has an invalid PLANKTON_IMAGE_ID" ;;
+    esac
+    inspected_id=$(/usr/bin/docker image inspect --format '{{.Id}}' "$image_ref" 2>/dev/null) || \
+        die "release image is absent: $image_ref"
+    [ "$inspected_id" = "$image_id" ] || die "release image identity mismatch: $image_ref"
+}
+
+link_release() {
+    link=$1
+    target_release=$2
+    temporary=$release_root/.$(/usr/bin/basename "$link").$$
+    /usr/bin/ln -s "releases/$target_release" "$temporary"
+    if ! /usr/bin/mv -Tf "$temporary" "$link"; then
+        /usr/bin/unlink "$temporary" 2>/dev/null || true
+        die "could not update $link"
+    fi
+}
+
+active_usb_profile() {
+    if /usr/bin/systemctl is-active --quiet "$fallback"; then
+        echo "$fallback"
+    else
+        echo "$dedicated"
+    fi
+}
+
+stop_runtime() {
+    /usr/bin/systemctl stop "$platform" "$test_platform" "$dedicated" "$fallback" "$test_usb"
+}
+
+start_runtime() {
+    profile=$1
+    /usr/bin/systemctl daemon-reload
+    /usr/bin/systemctl start "$inhibitor" "$profile" "$platform"
+}
+
+healthy() {
+    profile=$1
+    /usr/bin/systemctl is-active --quiet "$profile" || return 1
+    /usr/bin/systemctl is-active --quiet "$platform" || return 1
+    [ -n "$(/usr/bin/docker ps --quiet --filter label=com.docker.compose.project=plankton-inference --filter label=com.docker.compose.service=api --filter status=running)" ] || return 1
+    [ -n "$(/usr/bin/docker ps --quiet --filter label=com.docker.compose.project=plankton-inference --filter label=com.docker.compose.service=worker --filter status=running)" ] || return 1
+    /usr/bin/curl --fail --silent --show-error --max-time 2 \
+        http://127.0.0.1:8000/api/v1/health >/dev/null
+}
+
+wait_until_healthy() {
+    profile=$1
+    attempt=0
+    while [ "$attempt" -lt 60 ]; do
+        healthy "$profile" && return 0
+        attempt=$((attempt + 1))
+        /usr/bin/sleep 1
+    done
+    return 1
+}
+
+activate() {
+    release=$1
+    reason=$2
+    validate_release "$release"
+    old_release=$(release_from_link "$current" || true)
+    [ "$release" != "$old_release" ] || die "release is already active: $release"
+    [ ! -e /run/plankton-inference/active-job ] || die "an inference job is active"
+    profile=$(active_usb_profile)
+
+    stop_runtime
+    link_release "$current" "$release"
+    start_runtime "$profile"
+    if wait_until_healthy "$profile"; then
+        if [ -n "$old_release" ]; then
+            link_release "$previous" "$old_release"
+        fi
+        /usr/bin/logger -t plankton-release -- \
+            "result=activated release=$release previous=${old_release:-none} reason=$reason"
+        echo "active release: $release"
+        return
+    fi
+
+    /usr/bin/logger -t plankton-release -- \
+        "result=health-failed release=$release previous=${old_release:-none} reason=$reason"
+    stop_runtime
+    if [ -n "$old_release" ]; then
+        link_release "$current" "$old_release"
+        start_runtime "$profile"
+        wait_until_healthy "$profile" || die "candidate and automatic restore both failed"
+        /usr/bin/logger -t plankton-release -- \
+            "result=restored release=$old_release failed_release=$release reason=$reason"
+    else
+        /usr/bin/unlink "$current" 2>/dev/null || true
+    fi
+    die "release health check failed; previous release restored"
+}
+
+command=${1:-}
+if [ "$command" = status ]; then
+    dedicated_state=$(/usr/bin/systemctl is-active "$dedicated" 2>/dev/null || true)
+    fallback_state=$(/usr/bin/systemctl is-active "$fallback" 2>/dev/null || true)
+    platform_state=$(/usr/bin/systemctl is-active "$platform" 2>/dev/null || true)
+    echo "current=$(release_from_link "$current" || echo none)"
+    echo "previous=$(release_from_link "$previous" || echo none)"
+    echo "dedicated=${dedicated_state:-unknown}"
+    echo "root-fallback=${fallback_state:-unknown}"
+    echo "platform=${platform_state:-unknown}"
+    exit 0
+fi
+
+[ "$(/usr/bin/id -u)" -eq 0 ] || die "must run as root"
+case "$command" in
+    activate)
+        [ "$#" -ge 3 ] || usage
+        release=$2
+        shift 2
+        activate "$release" "$*"
+        ;;
+    rollback)
+        [ "$#" -ge 2 ] || usage
+        shift
+        release=$(release_from_link "$previous" || true)
+        [ -n "$release" ] || die "no previous release is recorded"
+        activate "$release" "rollback: $*"
+        ;;
+    *) usage ;;
+esac

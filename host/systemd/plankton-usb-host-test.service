@@ -1,0 +1,36 @@
+[Unit]
+Description=PICASSO Test USB host service (dedicated account)
+After=clamav-daemon.service polkit.service udisks2.service plankton-usb-mount-broker.service
+Wants=clamav-daemon.service polkit.service udisks2.service
+Requires=plankton-usb-mount-broker.service
+Before=plankton-platform-test.service
+Conflicts=plankton-usb-host.service plankton-usb-host-root.service
+
+[Service]
+Type=simple
+User=plankton-usb
+Group=plankton-inference
+SupplementaryGroups=clamav
+UMask=0007
+EnvironmentFile=/etc/plankton-inference/platform.env
+Environment=PYTHONPATH=/opt/plankton-inference/test-current/host/usb_agent
+RuntimeDirectory=plankton-inference
+RuntimeDirectoryMode=2770
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/bin/flock --exclusive --nonblock /run/plankton-inference/usb-host.lock /usr/bin/python3 -m plankton_usb_agent
+Restart=on-failure
+RestartSec=2s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+BindPaths=/var/lib/plankton-inference-test-current:/var/lib/plankton-inference
+ReadWritePaths=/var/lib/plankton-inference-test /var/lib/plankton-inference-test-current /var/lib/plankton-inference /run/plankton-inference -/media/plankton-usb -/run/media/plankton-usb
+# The broker enters this namespace to create the one exclusive service mount.
+# Desktop paths stay hidden while the lease is active.
+ReadOnlyPaths=-/media/operator -/run/media/operator
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=CAP_DAC_OVERRIDE
+AmbientCapabilities=CAP_DAC_OVERRIDE

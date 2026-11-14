@@ -1,0 +1,127 @@
+#!/usr/bin/python3
+"""Open the local PICASSO UI in a browserless GTK/WebKit window."""
+
+import json
+import os
+import re
+import signal
+import sys
+import threading
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("WebKit2", "4.1")
+from gi.repository import Gdk, GLib, Gtk, WebKit2
+
+DEFAULT_URL = "http://127.0.0.1:8000/"
+ALLOWED_PORTS = {8000, 18080}
+
+
+def validate_url(value: str) -> str:
+    parsed = urlparse(value)
+    if parsed.scheme != "http" or parsed.hostname != "127.0.0.1" or parsed.port not in ALLOWED_PORTS:
+        raise SystemExit("plankton-web-app: URL must be http://127.0.0.1:8000/ or :18080/")
+    return value.rstrip("/") + "/"
+
+
+def main() -> None:
+    base_url = validate_url(sys.argv[1] if len(sys.argv) in {2, 4} else DEFAULT_URL)
+    ready_fd: int | None = None
+    if len(sys.argv) == 4 and sys.argv[2] == "--ready-fd":
+        try:
+            ready_fd = int(sys.argv[3])
+        except ValueError as error:
+            raise SystemExit("plankton-web-app: ready fd must be an integer") from error
+    elif len(sys.argv) > 2:
+        raise SystemExit("usage: plankton-web-app [url] [--ready-fd FD]")
+
+    wm_class = "PICASSO-Test" if urlparse(base_url).port == 18080 else "PICASSO"
+    window = Gtk.Window(title="PICASSO")
+    window.set_wmclass(wm_class.lower(), wm_class)
+    window.set_default_size(1280, 840)
+    session_id = None
+    closing = False
+
+    def close_session():
+        if session_id is None:
+            return
+        request = Request(
+            base_url + "api/v1/session/close",
+            data=json.dumps({"session_id": session_id}).encode(),
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        try:
+            with urlopen(request, timeout=35) as response:
+                response.read()
+        except OSError as error:
+            print(f"PICASSO session cleanup pending: {type(error).__name__}", file=sys.stderr)
+
+    def close_window(*_args):
+        nonlocal closing
+        if not closing:
+            closing = True
+            threading.Thread(target=close_session, name="picasso-session-close").start()
+        Gtk.main_quit()
+
+    window.connect("destroy", close_window)
+    for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(signum, lambda *_args: GLib.idle_add(window.destroy))
+
+    context = WebKit2.WebContext.new_ephemeral()
+    view = WebKit2.WebView.new_with_context(context)
+    content = view.get_user_content_manager()
+
+    def remember_session(_manager, result):
+        nonlocal session_id
+        value = result.get_js_value().to_string()
+        if re.fullmatch(r"[A-Za-z0-9-]{1,128}", value):
+            session_id = value
+
+    content.connect("script-message-received::picassoSession", remember_session)
+    content.register_script_message_handler("picassoSession")
+
+    def decide_navigation(_view, decision, decision_type):
+        if decision_type != WebKit2.PolicyDecisionType.NAVIGATION_ACTION:
+            return False
+        request = decision.get_navigation_action().get_request()
+        if request.get_uri().startswith(base_url):
+            return False
+        decision.ignore()
+        return True
+
+    view.connect("decide-policy", decide_navigation)
+    window.add(view)
+    window.set_opacity(0.0)
+    window.show_all()
+    window.present()
+
+    reveal_attempts = 0
+
+    def enforce_maximize():
+        nonlocal ready_fd, reveal_attempts
+        reveal_attempts += 1
+        window.maximize()
+        native_window = window.get_window()
+        maximized = native_window is not None and bool(native_window.get_state() & Gdk.WindowState.MAXIMIZED)
+        if maximized or reveal_attempts >= 40:
+            window.set_opacity(1.0)
+            if ready_fd is not None:
+                try:
+                    os.write(ready_fd, b"visible\n")
+                finally:
+                    os.close(ready_fd)
+                ready_fd = None
+            return GLib.SOURCE_REMOVE
+        return True
+
+    GLib.timeout_add(50, enforce_maximize)
+    view.load_uri(base_url)
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

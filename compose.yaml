@@ -1,0 +1,66 @@
+name: plankton-inference
+
+x-application: &application
+  image: ${PLANKTON_IMAGE_REF:?set PLANKTON_IMAGE_REF to a prepared release image}
+  env_file:
+    - ${PLANKTON_ENV_FILE:-.env}
+  group_add:
+    - "${PLANKTON_HOST_GROUP_ID:?set PLANKTON_HOST_GROUP_ID to the plankton-inference group GID}"
+  read_only: true
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,size=1g
+  volumes:
+    - type: bind
+      source: /var/lib/plankton-inference
+      target: /var/lib/plankton-inference
+    - type: bind
+      source: /run/plankton-inference
+      target: /run/plankton-inference
+  logging:
+    driver: local
+    options:
+      max-size: 20m
+      max-file: "5"
+
+services:
+  api:
+    <<: *application
+    command: ["python", "-m", "plankton_api"]
+    network_mode: host
+    environment:
+      PLANKTON_API_PORT: "8000"
+      PLANKTON_WEB_DIST: /opt/plankton-inference/apps/web/dist
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health').read()
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  worker:
+    <<: *application
+    command: ["python", "-m", "plankton_worker"]
+    network_mode: none
+    shm_size: 2gb
+    gpus: all
+    environment:
+      PLANKTON_CHECKPOINT_PATH: /opt/plankton-inference/model/best_model.pt
+    volumes:
+      - type: bind
+        source: /var/lib/plankton-inference
+        target: /var/lib/plankton-inference
+      - type: bind
+        source: /run/plankton-inference
+        target: /run/plankton-inference
+      - type: bind
+        source: ${PLANKTON_CHECKPOINT_PATH:?set PLANKTON_CHECKPOINT_PATH}
+        target: /opt/plankton-inference/model/best_model.pt
+        read_only: true

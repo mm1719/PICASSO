@@ -1,0 +1,58 @@
+{
+  "fixture_kind": "synthetic_not_model_output",
+  "description": "Manually chosen test scores; no image, checkpoint, training data, or model execution involved.",
+  "softmax_scores": [
+    0.4,
+    0.25,
+    0.15,
+    0.1,
+    0.05,
+    0.0033333333333333335,
+    0.0033333333333333335,
+    0.0033333333333333335,
+    0.0033333333333333335,
+    0.0033333333333333335,
+    0.0033333333333333335,
+    0.0033333333333333335,
+    0.0033333333333333335,
+    0.0033333333333333335,
+    0.0033333333333333335,
+    0.0033333333333333335,
+    0.0033333333333333335,
+    0.0033333333333333335,
+    0.0033333333333333335,
+    0.0033333333333333335
+  ],
+  "top5": [
+    {
+      "class_index": 0,
+      "target_id": "11",
+      "display_name": "Ciliophora",
+      "softmax_score": 0.4
+    },
+    {
+      "class_index": 1,
+      "target_id": "51",
+      "display_name": "Mollusca",
+      "softmax_score": 0.25
+    },
+    {
+      "class_index": 2,
+      "target_id": "558",
+      "display_name": "Porifera",
+      "softmax_score": 0.15
+    },
+    {
+      "class_index": 3,
+      "target_id": "799",
+      "display_name": "Nematoda",
+      "softmax_score": 0.1
+    },
+    {
+      "class_index": 4,
+      "target_id": "801",
+      "display_name": "Chlorophyta",
+      "softmax_score": 0.05
+    }
+  ]
+}

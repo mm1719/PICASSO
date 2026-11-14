@@ -1,0 +1,32 @@
+name: plankton-inference-test
+
+services:
+  api:
+    environment:
+      PLANKTON_API_PORT: "18080"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:18080/api/v1/health').read()
+    volumes:
+      - type: bind
+        source: /var/lib/plankton-inference-test-current
+        target: /var/lib/plankton-inference
+      - type: bind
+        source: /run/plankton-inference
+        target: /run/plankton-inference
+
+  worker:
+    volumes:
+      - type: bind
+        source: /var/lib/plankton-inference-test-current
+        target: /var/lib/plankton-inference
+      - type: bind
+        source: /run/plankton-inference
+        target: /run/plankton-inference
+      - type: bind
+        source: ${PLANKTON_CHECKPOINT_PATH:?set PLANKTON_CHECKPOINT_PATH}
+        target: /opt/plankton-inference/model/best_model.pt
+        read_only: true

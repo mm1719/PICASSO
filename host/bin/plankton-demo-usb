@@ -1,0 +1,127 @@
+#!/bin/sh
+set -eu
+
+config=/etc/plankton-inference/demo-usb.env
+gadget=/sys/kernel/config/usb_gadget/plankton-inference-demo
+namespace=plankton-inference-demo-usb
+runtime=/run/plankton-inference-demo-usb
+
+usage() {
+    echo "usage: plankton-demo-usb init <photo-directory> | up | down | status" >&2
+    exit 2
+}
+
+die() { echo "plankton-demo-usb: $*" >&2; exit 1; }
+write() { printf '%s\n' "$2" >"$1"; }
+
+[ "$(/usr/bin/id -u)" -eq 0 ] || die "must run as root"
+[ -r "$config" ] || die "missing configuration: $config"
+# shellcheck disable=SC1090
+. "$config"
+
+: "${PLANKTON_DEMO_USB_ROOT:?set PLANKTON_DEMO_USB_ROOT}"
+: "${PLANKTON_DEMO_USB_IMAGE:?set PLANKTON_DEMO_USB_IMAGE}"
+: "${PLANKTON_DEMO_USB_UUID:?set PLANKTON_DEMO_USB_UUID}"
+: "${PLANKTON_DEMO_USB_SERIAL:?set PLANKTON_DEMO_USB_SERIAL}"
+case "$PLANKTON_DEMO_USB_ROOT" in /var/lib/plankton-inference/*) ;; *) die "root must be below /var/lib/plankton-inference" ;; esac
+case "$PLANKTON_DEMO_USB_IMAGE" in "$PLANKTON_DEMO_USB_ROOT"/*) ;; *) die "image must be below demo root" ;; esac
+
+command=${1:-}
+
+remove_gadget() {
+    if [ -d "$gadget" ]; then
+        write "$gadget/UDC" "" || true
+        /usr/bin/rm -f "$gadget/configs/c.1/mass_storage.usb0"
+        write "$gadget/functions/mass_storage.usb0/lun.0/file" "" || true
+        /usr/bin/rmdir "$gadget/configs/c.1/strings/0x409" "$gadget/configs/c.1" \
+            "$gadget/functions/mass_storage.usb0" "$gadget/strings/0x409" "$gadget" 2>/dev/null || true
+    fi
+}
+
+down() {
+    if [ -r "$runtime/port" ]; then
+        /usr/bin/usbip detach --port "$(/usr/bin/cat "$runtime/port")" || true
+    fi
+    if [ -r "$runtime/usbipd.pid" ]; then
+        /usr/bin/kill "$(/usr/bin/cat "$runtime/usbipd.pid")" 2>/dev/null || true
+    fi
+    /usr/sbin/ip netns del "$namespace" 2>/dev/null || true
+    remove_gadget
+    /usr/bin/rm -rf "$runtime" 2>/dev/null || true
+}
+
+init() {
+    [ "$#" -eq 2 ] || usage
+    source=$2
+    [ -d "$source" ] || die "photo directory is not a directory: $source"
+    [ ! -e "$PLANKTON_DEMO_USB_IMAGE" ] || die "refusing to overwrite existing image"
+    unsafe=$(/usr/bin/find "$source" ! -type d ! -type f -print -quit)
+    [ -z "$unsafe" ] || die "photo directory contains unsupported entry: $unsafe"
+    /usr/bin/install -d -m 0700 "$PLANKTON_DEMO_USB_ROOT"
+    bytes=$(/usr/bin/du -sb "$source" | /usr/bin/awk '{print $1}')
+    size=$((bytes + bytes / 5 + 1073741824))
+    /usr/bin/truncate --size "$size" "$PLANKTON_DEMO_USB_IMAGE"
+    loop=$(/usr/sbin/losetup --find --show --partscan "$PLANKTON_DEMO_USB_IMAGE")
+    trap '/usr/sbin/losetup --detach "$loop" 2>/dev/null || true' EXIT HUP INT TERM
+    printf 'label: gpt\n, , L\n' | /usr/sbin/sfdisk "$loop" >/dev/null
+    partition="${loop}p1"
+    for _ in 1 2 3 4 5 6 7 8 9 10; do [ -b "$partition" ] && break; /usr/bin/sleep 1; done
+    [ -b "$partition" ] || die "partition did not appear"
+    /usr/sbin/mkfs.ext4 -q -F -U "$PLANKTON_DEMO_USB_UUID" -L PLANKTON_DEMO_USB "$partition"
+    mount="$PLANKTON_DEMO_USB_ROOT/seed"
+    /usr/bin/install -d -m 0700 "$mount"
+    /usr/bin/mount --options nodev,nosuid,noexec "$partition" "$mount"
+    /usr/bin/cp -a "$source/." "$mount/"
+    /usr/bin/sync
+    /usr/bin/umount "$mount"
+    /usr/sbin/losetup --detach "$loop"
+    trap - EXIT HUP INT TERM
+    echo "initialized image: $PLANKTON_DEMO_USB_IMAGE"
+}
+
+up() {
+    [ -f "$PLANKTON_DEMO_USB_IMAGE" ] || die "prepared image is absent; run init first"
+    [ ! -e "$gadget" ] || die "refusing to replace existing gadget: $gadget"
+    /usr/bin/usbip port 2>&1 | /usr/bin/grep -q '<Port in Use>' && die "existing USB/IP port is in use" || true
+    /usr/sbin/modprobe libcomposite
+    /usr/sbin/modprobe usbip_vudc
+    /usr/sbin/modprobe vhci_hcd
+    /usr/bin/mountpoint -q /sys/kernel/config || /usr/bin/mount -t configfs none /sys/kernel/config
+    /usr/bin/install -d -m 0700 "$runtime"
+    /usr/bin/mkdir "$gadget"
+    write "$gadget/idVendor" 0x1d6b
+    write "$gadget/idProduct" 0x0104
+    /usr/bin/mkdir -p "$gadget/strings/0x409" "$gadget/configs/c.1/strings/0x409"
+    write "$gadget/strings/0x409/serialnumber" "$PLANKTON_DEMO_USB_SERIAL"
+    write "$gadget/strings/0x409/manufacturer" "Plankton Inference Demo"
+    write "$gadget/strings/0x409/product" "Persistent Demo USB"
+    write "$gadget/configs/c.1/strings/0x409/configuration" "Plankton informal demo"
+    /usr/bin/mkdir "$gadget/functions/mass_storage.usb0"
+    write "$gadget/functions/mass_storage.usb0/lun.0/removable" 1
+    write "$gadget/functions/mass_storage.usb0/lun.0/ro" 0
+    write "$gadget/functions/mass_storage.usb0/lun.0/file" "$PLANKTON_DEMO_USB_IMAGE"
+    /usr/bin/ln -s "$gadget/functions/mass_storage.usb0" "$gadget/configs/c.1/mass_storage.usb0"
+    write "$gadget/UDC" usbip-vudc.0
+    /usr/sbin/ip netns add "$namespace"
+    /usr/sbin/ip netns exec "$namespace" /usr/sbin/ip link set lo up
+    /usr/sbin/ip netns exec "$namespace" /usr/bin/usbipd --device --daemon --ipv4 --tcp-port=3240 --pid="$runtime/usbipd.pid"
+    attach_status=0
+    /usr/sbin/ip netns exec "$namespace" /usr/bin/usbip --tcp-port=3240 attach --remote 127.0.0.1 --busid usbip-vudc.0 || attach_status=$?
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        port=$(/usr/bin/usbip port 2>&1 | /usr/bin/sed -n 's/^Port[[:space:]]*\([0-9][0-9]*\):.*/\1/p' | /usr/bin/head -n 1)
+        [ -n "$port" ] && break
+        /usr/bin/sleep 1
+    done
+    [ -n "${port:-}" ] || { down; die "USB/IP attach did not create a port (exit $attach_status)"; }
+    printf '%s\n' "$port" >"$runtime/port"
+    /usr/bin/udevadm settle
+    echo "attached persistent demo USB on USB/IP port $port"
+}
+
+case "$command" in
+    init) init "$@" ;;
+    up) [ "$#" -eq 1 ] || usage; up ;;
+    down) [ "$#" -eq 1 ] || usage; down ;;
+    status) [ "$#" -eq 1 ] || usage; [ -r "$runtime/port" ] && echo "attached" || echo "detached" ;;
+    *) usage ;;
+esac

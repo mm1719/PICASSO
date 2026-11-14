@@ -1,0 +1,21 @@
+[Unit]
+Description=PICASSO production-equivalent candidate API and worker
+Requires=docker.service plankton-usb-host-test.service
+Wants=plankton-job-inhibitor.path
+After=docker.service plankton-job-inhibitor.path plankton-usb-host-test.service
+Conflicts=plankton-platform.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/plankton-inference/test-current
+EnvironmentFile=/etc/plankton-inference/platform.env
+EnvironmentFile=/opt/plankton-inference/test-current/release.env
+Environment=PLANKTON_ENV_FILE=/etc/plankton-inference/platform.env
+ExecStartPre=/usr/local/sbin/plankton-test-session verify
+ExecStart=/usr/bin/docker compose -f compose.yaml -f compose.test.yaml up --no-build --remove-orphans
+ExecStop=/usr/bin/docker compose -f compose.yaml -f compose.test.yaml down
+ExecStopPost=/usr/bin/python3 /opt/plankton-inference/test-current/host/bin/plankton-test-compose-cleanup
+TimeoutStartSec=0
+TimeoutStopSec=120
+Restart=on-failure
+RestartSec=5s

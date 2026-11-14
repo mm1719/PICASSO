@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=PICASSO
+Comment=Plankton Image Classification & Analysis System for Scientific Observation
+Exec=/usr/local/sbin/plankton-desktop-launcher production
+Icon=applications-science
+Terminal=false
+StartupWMClass=PICASSO
+Categories=Science;
+StartupNotify=true
