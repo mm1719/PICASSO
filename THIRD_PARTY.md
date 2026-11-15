@@ -37,6 +37,8 @@ The portable test environment is separately specified in `requirements/showcase-
 
 On 2026-11-15, the owner explicitly approved publication of the original SVG logo and linking the historical v1 beta demo video. The SVG contains paths and inline styles; no font file, embedded raster image, script or external resource is included. This replaces the initial plain text wordmark. The video remains on Google Drive, with its existing sharing settings unchanged.
 
+The [README logo variant](docs/assets/picasso-logo-readme.svg) preserves the original paths and colors and adds only a pale background rectangle so the dark-green artwork remains visible on both light and dark page backgrounds. The application continues to use the original transparent SVG.
+
 The four [interface screenshots](docs/screenshots/README.md) were captured from the real frontend using synthetic API responses and a visible simulation banner. They contain no research image samples or real device/job data. Publication approval does not assign an artwork, video or project code-reuse license.
 
 ## Release decisions still needed

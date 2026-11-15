@@ -47,6 +47,14 @@ The later presentation update adds four synthetic screenshots, the original SVG 
 
 The capture blocked unmocked API/external HTTP requests and disabled service workers. It used an isolated loopback Vite server with no proxy and did not start the API or worker. The first attempt could not start Vite under restricted execution. A subsequent fixture expectation incorrectly assumed the workstation-status card polls; it was corrected to reflect the existing initial-load behavior. The successful run used the unchanged application with synthetic responses, and the images were then reviewed. These checks do not expand the earlier Python or unit-test counts, and the full existing browser suite was not rerun.
 
+### Public-page review — 2026-11-15
+
+Anonymous HTTP checks confirmed that GitHub renders the README with five image elements and the historical demo link. The original logo, four PNGs and their five enlargement pages returned HTTP 200; the served image bytes matched the reviewed local assets. The four steps retain their selection → preflight → progress → completion order, captions and alternative text. The Drive page returned HTTP 200 with the expected video title, and permission metadata confirmed anyone-with-link reader access.
+
+GitHub's published dark-theme CSS uses `#0d1117` as the default background. The transparent logo's `#102b24` artwork has approximately 1.26:1 contrast against it. A README-only SVG variant adds a pale `#edf5f0` background rectangle while preserving every original path and color. The application SVG and screenshots are unchanged.
+
+The browser access host was unavailable during this review. These are checks of the live site's rendered HTML, served assets, styles and permissions, not a browser screenshot review. Desktop/mobile layout, dark-theme rendering and in-browser video playback still need visual confirmation; HTTP 200 and sharing metadata alone do not prove playback.
+
 ## Not performed
 
 No model loading, training or inference; no GPU use; no physical USB, malware, reboot, deployment or service mutation; no Docker image build; no API live integration suite; no browser-to-backend end-to-end run; no backend Ruff/Mypy run; no full coverage, mutation, CVE or penetration audit. The mocked screenshot test above is an interface demonstration, not an installed-system test.

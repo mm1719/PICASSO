@@ -37,4 +37,6 @@ The recorded run used Node 20.20.2, npm 10.8.2, Playwright 1.62.1 and its cached
 
 The [original SVG logo](../../apps/web/src/assets/logo_picasso.svg) is included with the owner's explicit publication approval. It contains vector paths and inline styles, with no scripts, external references, embedded raster images or bundled fonts. Approval to publish is not an additional reuse license.
 
+The root README uses a [presentation variant](../assets/picasso-logo-readme.svg) with a pale background rectangle for contrast on GitHub's dark theme. The original paths and colors are unchanged; the application and these screenshots continue to use the transparent original.
+
 The [PICASSO v1 beta demo](https://drive.google.com/file/d/1i3bz5awIcIcf7QZb3rSTd7moFuEhFYoC/view) is a separate historical recording from September 2026, approximately 5 minutes 17 seconds long. The owner confirmed its contents are approved for public linking. It includes the original logo, desktop workflow and exported result files; it is not the source of these synthetic screenshots. Its existing Drive link-sharing permission was left unchanged, and the video is not copied into this repository. It is neither a benchmark nor evidence that the current checkout has passed hardware validation.

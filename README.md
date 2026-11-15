@@ -1,6 +1,6 @@
 # PICASSO
 
-<img src="apps/web/src/assets/logo_picasso.svg" alt="PICASSO logo" width="520">
+<img src="docs/assets/picasso-logo-readme.svg" alt="PICASSO logo" width="520">
 
 **Turn a folder of plankton images into traceable classification results.**
 
