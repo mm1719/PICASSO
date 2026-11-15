@@ -20,15 +20,31 @@ PICASSO implements these steps around the classifier, with explicit job states a
 
 **[Watch the v1 beta demo on Google Drive](https://drive.google.com/file/d/1i3bz5awIcIcf7QZb3rSTd7moFuEhFYoC/view)** — about 5 minutes, recorded in September 2026. This owner-approved historical recording shows the interface, desktop handoff and exported files. It predates the current source snapshot and is not validation of this checkout or a model benchmark.
 
-The screenshots below use the **current public frontend with synthetic API responses**. No research images, model weights or real device data were used. All names, paths, counts, speed and storage values are illustrative; the simulated completion screen does not prove an actual export. Click an image to enlarge it.
+The screenshots below use the **current public frontend with synthetic API responses**. No research images, model weights or real device data were used. All names, paths, counts, speed and storage values are illustrative; the simulated completion screen does not prove an actual export. Open a screenshot to view the full-size image, then zoom in to inspect the controls.
 
-| 1. Select a source | 2. Review preflight |
-| --- | --- |
-| [![Select the synthetic DEMO USB folder and optional metadata CSV](docs/screenshots/01-select-source.png)](docs/screenshots/01-select-source.png) | [![Review a synthetic 12-image batch, available storage and the Confirm and start button](docs/screenshots/02-review-preflight.png)](docs/screenshots/02-review-preflight.png) |
-| Choose an image folder and optionally supply a metadata CSV path. | Check the image count and local storage requirement before starting. |
-| **3. Follow the job** | **4. Review completion** |
-| [![Simulated inference at 50 percent with stage progress, speed and rejection count](docs/screenshots/03-follow-progress.png)](docs/screenshots/03-follow-progress.png) | [![Simulated completion with prediction and rejection totals, archive path and score caveat](docs/screenshots/04-review-results.png)](docs/screenshots/04-review-results.png) |
-| Track the current stage, processed images and rejected inputs. An unknown overall ETA remains `Calculating…`. | Review the export summary, local archive location and reminder that scores are uncalibrated. |
+### 1. Select a source
+
+Choose an image folder, optionally supply a metadata CSV path, then select **Run preflight**.
+
+[![Select the synthetic DEMO USB folder and optional metadata CSV](docs/screenshots/01-select-source.png)](docs/screenshots/01-select-source.png?raw=true)
+
+### 2. Review preflight
+
+Check the image count and local storage requirement, then select **Confirm and start**.
+
+[![Review a synthetic 12-image batch, available storage and the Confirm and start button](docs/screenshots/02-review-preflight.png)](docs/screenshots/02-review-preflight.png?raw=true)
+
+### 3. Follow the job
+
+Track the current stage, processed images and rejected inputs. An unknown overall ETA remains `Calculating…`.
+
+[![Simulated inference at 50 percent with stage progress, speed and rejection count](docs/screenshots/03-follow-progress.png)](docs/screenshots/03-follow-progress.png?raw=true)
+
+### 4. Review completion
+
+Review the export summary, local archive location and reminder that scores are uncalibrated. Select **Prepare another job** to return to batch selection.
+
+[![Simulated completion with prediction and rejection totals, archive path and score caveat](docs/screenshots/04-review-results.png)](docs/screenshots/04-review-results.png?raw=true)
 
 The capture uses the real interface, with only a demo label added above it. [Capture source, reproduction steps and scope](docs/screenshots/README.md) explain how these images were made. The historical video and synthetic screenshots are separate demonstrations.
 
