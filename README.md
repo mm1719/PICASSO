@@ -1,33 +1,53 @@
 # PICASSO
 
-**Plankton Image Classification & Analysis System for Scientific Observation**
+**Turn a folder of plankton images into traceable classification results.**
 
-A local-first research application that turns a folder of plankton images into traceable classification results. PICASSO connects a React interface, a Python control API, resumable job processing, a GPU inference adapter, and a narrowly scoped USB service.
+*Plankton Image Classification & Analysis System for Scientific Observation*
 
-> **Source-only beta preview.** This is a curated engineering snapshot, not a stable release, a hosted service, or a complete deployment package. It includes no research images, datasets, trained weights, private deployment configuration, or original Git history. The source is published as a viewable showcase; no open-source license has been assigned.
+PICASSO is a side project for researchers processing image batches on a local Ubuntu workstation. It brings USB intake, GPU classification, progress tracking, result export, and input archiving into one workflow.
 
-## What the code demonstrates
+> **Source-only beta showcase.** Explore the implementation, run the CPU-only tests, and inspect the interface. Real inference requires a separately trusted model and reviewed host deployment; this checkout is not a hosted demo or a complete installation package.
 
-- **Durable workflows:** SQLite-backed job state, batched prediction commits, and recovery paths for interrupted work.
-- **Scientific output contracts:** stable image identifiers, a fixed 20-category mapping, deterministic ordering, rejected-image records, and CSV/JSON summaries.
-- **GPU coordination:** a shared lock prevents the inference worker from competing with a cooperating training process.
-- **USB trust boundaries:** scan-before-import, path and content checks, and exclusive ownership coordinated through a fixed-operation host broker.
-- **Packaging and operations:** non-root application containers, read-only root filesystems, and reference deployment/rollback utilities.
+## The problem
 
-These are implementation features, not a claim that every deployment or recovery scenario has passed qualification.
+A research image batch needs a reliable path from source files to usable results: preserve each image's identity, join optional metadata, record unreadable images, save progress across interruptions, and verify the exported files. Removable media and a GPU shared with training add device-ownership and resource-coordination problems.
 
-## Latest source update — 2026-11-15
+PICASSO implements these steps around the classifier, with explicit job states and traceable CSV/JSON outputs.
 
-This showcase now includes the next reviewed, merged development changes:
+## What it does
 
-- Initial scanning speed stays at `Calculating…` until byte throughput is available; scanning is never presented as inference images/s.
-- A signal that triggers launcher rollback no longer also closes the restored window. The switching progress window follows its own launcher's lifetime.
-- Frontend tooling and its lockfile are updated, with the matching regression tests and dependency inventory.
-- Broker requests survive disconnected clients, failed claims retain cleanup responsibility, and rollback rechecks device identity. A failed Preflight remains addressable so Refresh can retry cleanup before enabling another selection.
+1. **Select a batch.** Browse a USB image folder recursively and optionally select a metadata CSV. Supported image candidates are PNG/JPEG; individual decoding failures are recorded.
+2. **Check and import.** Run preflight, claim exclusive access to the device, scan the selected tree, and verify copies into local staging before inference.
+3. **Classify and follow progress.** Wait for the shared GPU lock, run the configured classifier, and display stage-specific counts, throughput, and estimated time. Unknown estimates remain `Calculating…`.
+4. **Produce traceable results.** Preserve image IDs and source-relative paths, report the top prediction, include top-three scores for low-score cases, and summarize rejected images and category counts.
+5. **Archive and hand back.** Verify the local input archive and result export to the original device, then return ordinary completed/failed jobs' device ownership to the desktop. Security-blocked jobs follow a separate eject path.
 
-See the [source sync record](docs/SOURCE_SYNC.md) for the pinned source revision, included changes, and work still awaiting review. The [validation record](docs/VALIDATION.md) reports checks on this public checkout.
+The published source implements this workflow. Hardware and deployment qualification remain limited as described below.
 
-## Architecture
+### Result files
+
+| File | Contents |
+| --- | --- |
+| `predictions_top1.csv` | Top prediction and score for each successfully classified image |
+| `low_confidence_top3.csv` | Top three predictions when the top score is below 0.4 |
+| `rejected_images.csv` | Rejected image identifiers, processing stage, and reason |
+| `counts_summary.csv` | Batch totals and counts for all 20 mapped categories |
+| `job_summary.json` | Machine-readable job summary and provenance |
+
+Scores are **uncalibrated softmax scores**, not probabilities of correctness. The 20 categories include broad groups and non-taxonomic targets; they are not 20 species. The fixed mapping retains index 15, `370437 / Heterokontophyta`.
+
+## Engineering highlights
+
+| Design choice | What it addresses |
+| --- | --- |
+| **Durable job state in SQLite** | Persisted stages and batched prediction commits support resuming interrupted work without treating partial output as complete. |
+| **Verified, atomic file publication** | Checksums, temporary outputs, and archive verification protect the boundary between work in progress and published results. |
+| **Explicit USB ownership** | A restricted service and fixed-operation broker control exclusive access. Cleanup responsibility survives lost replies, and rollback rechecks device identity. |
+| **GPU coordination** | The worker acquires a shared advisory lock before loading the model, coordinating with cooperating training processes. |
+| **Separated application and host privileges** | Non-root, read-only application containers do not receive raw USB block devices. Privileged mount operations stay in the host broker. |
+| **Recovery tested across layers** | Fake host adapters, in-process API tests, and mocked UI tests exercise failure paths, including cleanup retries and launcher rollback. |
+
+The stack combines **React, TypeScript and Vite** for the interface, **FastAPI** for local control, **SQLite** for persistence, and **PyTorch/timm** for the inference adapter. Docker Compose, systemd and Polkit source illustrate the deployment boundary.
 
 ```text
 Browser UI (React / TypeScript)
@@ -45,13 +65,29 @@ Control API (FastAPI) ---- SQLite job state
               Removable media
 ```
 
-The ordinary workflow is browse → preflight/exclusive claim → scan and verified import → inference → archive and verified export → native desktop handoff. A security-blocked job follows a separate eject path. The current design uses **exclusive ownership**, not simultaneous writable desktop and service views. See [architecture](docs/ARCHITECTURE.md) and [security boundaries](docs/SECURITY.md).
+See [architecture and scientific contracts](docs/ARCHITECTURE.md) and [security boundaries](docs/SECURITY.md) for the implementation details and tradeoffs.
+
+## Validation and current limits
+
+The latest recorded source validation, **2026-11-15**, covers the curated public checkout:
+
+| Check | Recorded result |
+| --- | --- |
+| Portable Python tests | **373 passed** across 25 modules, using synthetic data and fake host/USB adapters |
+| Frontend unit tests | **49 passed** across 4 files, with mocked API interactions |
+| Frontend lint, TypeScript and Vite build | **Passed** |
+
+These are source-level checks. No model-quality benchmark, real inference, GPU, physical USB, live API integration, browser end-to-end, host reboot, or deployment validation was performed for this public snapshot. Fresh Python dependency installation, full coverage, mutation testing, dependency-vulnerability and penetration audits were also not performed. There is no production-readiness or project-wide 100% coverage claim.
+
+The supported design scope is **one local machine, one user, and one active inference job**. It has no authentication or multi-tenant isolation and must not be exposed as a public-network service. Workstation assumptions remain in the reference source. Broker recovery has regression coverage, but installed hardware recovery and exFAT/kernel-stall resolution remain unqualified.
+
+The [validation record](docs/VALIDATION.md) gives exact environments, adaptations and exclusions. The [source sync record](docs/SOURCE_SYNC.md) tracks the reviewed development revision and changes included in this showcase.
 
 ## Explore without a model or USB
 
-### 1. Run the CPU-only contract tests
+### Run the CPU-only tests
 
-Use a separate Python 3.11 environment:
+Use Linux and a separate Python 3.11 environment; the tests exercise POSIX pipes and locks:
 
 ```bash
 python3.11 -m venv .venv-showcase
@@ -60,11 +96,11 @@ python -m pip install -r requirements/showcase-dev.txt
 make test-portable PYTHON=python
 ```
 
-The exported tests use temporary files, synthetic scores, fake operating-system/USB adapters, and an in-process API test client. Launcher tests use fake host operations and a fake GTK module; helper-process tests use temporary state. They do not open real windows, start a live API server, load a model, use a GPU, require service accounts, or modify an attached USB. Run them on Linux with the included POSIX pipe/lock support. Dependencies need to be installed first; after that the test run itself is offline.
+Tests use temporary files, synthetic scores, fake host/USB/GTK adapters, and an in-process API client. They do not open real windows, start a live API server, load a model, require service accounts, or modify attached media. After dependencies are installed, the test run is offline.
 
-### 2. Build and inspect the interface
+### Build and inspect the interface
 
-Use a current supported Node.js release compatible with the locked frontend dependencies:
+Use a Node.js release compatible with the locked frontend dependencies:
 
 ```bash
 npm --prefix apps/web ci --ignore-scripts
@@ -74,45 +110,30 @@ npm --prefix apps/web run build
 npm --prefix apps/web run dev
 ```
 
-Open the loopback address printed by Vite. The showcase defaults deliberately have **no API proxy**. Without an explicitly configured isolated backend, API-dependent controls show connection errors. This is interface inspection, not simulated scientific inference. Frontend unit tests exercise mocked interactions without a live backend. Do not point the preview at an existing research service.
+Open the loopback address printed by Vite. The showcase has **no default API proxy**: API-dependent controls show connection errors without an explicitly configured isolated backend. This lets you inspect the interface; it is not a simulated inference demo. Frontend tests exercise mocked interactions separately. Do not connect the preview to an existing research service.
 
-The plain text wordmark is a replacement created for this snapshot; the original artwork is not included.
+### Real inference requires a separate deployment
 
-## Running real inference is a separate deployment task
+The adapter constructs `convnextv2_large.fcmae_ft_in22k_in1k` with `pretrained=False`; it does not download weights. Real use requires an authorized, trusted compatible checkpoint and independently trusted SHA-256, the fixed mapping and preprocessing contract, CUDA-compatible dependencies, storage configuration, and reviewed host integration.
 
-The source contains the inference adapter, but **real inference cannot run from this checkout alone**. It requires a separately authorized and trusted compatible checkpoint, its independently trusted SHA-256, the fixed class mapping and preprocessing contract, CUDA-compatible dependencies, storage configuration, and reviewed host integration.
+`PLANKTON_CHECKPOINT_PATH` and `PLANKTON_CHECKPOINT_SHA256` are deployment inputs, never job or uploaded-file inputs. The checkpoint loader uses Python pickle semantics; a matching checksum alone does not establish safety. Never load a USB/user-uploaded checkpoint.
 
-The runtime constructs `convnextv2_large.fcmae_ft_in22k_in1k` with `pretrained=False`; it does not download or include pretrained/trained weights. `PLANKTON_CHECKPOINT_PATH` and `PLANKTON_CHECKPOINT_SHA256` are deployment inputs, never values supplied by an uploaded file or job. The trusted checkpoint loader uses Python pickle semantics; a checksum is not proof that a file is safe.
+`host/`, Dockerfiles, Compose files and environment examples are **deployment reference source**. They include privileged account, mount, service and policy operations; do not install or execute them as part of this quickstart. See the [deployment boundary](docs/DEPLOYMENT_BOUNDARY.md) before planning a dedicated installation.
 
-`host/`, Dockerfiles, Compose files, and environment examples are **reference source**, not installation instructions to run on a personal workstation. They include privileged account, mount, service, and policy operations. Their placeholders must be reviewed for a dedicated deployment. See [deployment boundary](docs/DEPLOYMENT_BOUNDARY.md).
+## Find your way around
 
-## Scope and limitations
-
-- Single-machine, single-user, one active inference job; no public-network or multi-tenant security claim.
-- Model scores are **uncalibrated softmax scores**, not probabilities of correctness. The existing routing threshold is 0.4.
-- Twenty mapped categories are not twenty species. The mapping is preserved, including index 15, `370437 / Heterokontophyta`.
-- No weights, model-quality benchmark, dataset redistribution, or full experiment reproduction is provided here.
-- No claim of production readiness, complete hardware qualification, full reboot recovery validation, or project-wide 100% test coverage.
-- The copied source may contain workstation assumptions. Passing the portable test subset does not qualify host deployment.
-- The broker recovery fixes have source-level regression coverage; installed hardware recovery and exFAT/kernel-stall resolution remain unqualified. See the [recovery validation boundary](docs/SECURITY.md#recovery-validation-boundary).
-
-## Repository guide
-
-| Path | Purpose |
+| Path | Start here for |
 | --- | --- |
-| `apps/api/` | Local control API |
-| `apps/web/` | React interface and mocked UI tests |
-| `apps/worker/` | Durable job execution and recovery |
-| `packages/core/` | State, output, and classification contracts |
-| `packages/control/` | Restricted USB-service client |
+| `apps/web/` | Interface and mocked UI tests |
+| `apps/api/`, `apps/worker/` | Local control and durable job execution |
+| `packages/core/` | Classification, state and output contracts |
+| `packages/control/`, `host/` | USB client, ownership and privilege boundaries |
 | `packages/inference/` | Trusted-checkpoint inference adapter |
-| `packages/simulator/` | Development-only fake adapters, not production inference |
-| `host/` | Deployment reference and privileged boundary implementation |
-| `tests/` | Curated CPU-only portable tests with synthetic fixtures |
-| `testing/usb_ownership_contract.py` | Pure evidence evaluator used by the tests |
+| `packages/simulator/` | Development-only fake adapters |
+| `tests/`, `testing/usb_ownership_contract.py` | Portable regressions and the pure ownership evidence evaluator |
 
-## Validation and licensing
+## Publication and licensing
 
-See the [validation record](docs/VALIDATION.md) for what was actually checked, and what was not.
+This showcase excludes research images, datasets, trained weights, private deployment configuration and original development history. It does not provide full experiment reproduction. The plain text wordmark replaces the original artwork, which is not included.
 
-**No open-source license has been assigned to this source showcase.** Public visibility and permission to reuse are different decisions. This repository does not grant an additional code-reuse license. A future code license requires a separate rights-holder decision. Dependencies retain their own terms; [third-party inventory](THIRD_PARTY.md) records the available metadata without granting rights to code, datasets, weights, or artwork.
+**No open-source license has been assigned.** Public visibility does not grant an additional code-reuse license; a future license requires a separate rights-holder decision. Dependencies retain their own terms. The [third-party inventory](THIRD_PARTY.md) records available metadata without granting rights to code, datasets, weights or artwork.
