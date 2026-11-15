@@ -53,7 +53,23 @@ Anonymous HTTP checks confirmed that GitHub renders the README with five image e
 
 GitHub's published dark-theme CSS uses `#0d1117` as the default background. The transparent logo's `#102b24` artwork has approximately 1.26:1 contrast against it. A README-only SVG variant adds a pale `#edf5f0` background rectangle while preserving every original path and color. The application SVG and screenshots are unchanged.
 
-The browser access host was unavailable during this review. These are checks of the live site's rendered HTML, served assets, styles and permissions, not a browser screenshot review. Desktop/mobile layout, dark-theme rendering and in-browser video playback still need visual confirmation; HTTP 200 and sharing metadata alone do not prove playback.
+The browser access host was unavailable during this initial review, so it covered rendered HTML, served assets, styles and permissions only. The subsequent local Playwright review below completes the browser checks; HTTP 200 and sharing metadata alone do not prove playback.
+
+### Live browser follow-up — 2026-11-15
+
+The published README at commit `786e63d88f6ad8c9c3230bf7594b86c30cb389f5` was checked with Playwright 1.62.1 and Chromium 151.0.7922.34 on Linux, using fresh signed-out contexts. Desktop used a 1440 × 1000 viewport. Mobile used the Pixel 7 Android user agent and touch emulation with a 390 × 844 viewport. Both used device scale 1 for the inspection captures.
+
+| Check | Result |
+| --- | --- |
+| Desktop and mobile, light and dark themes | **4 configurations passed**; Logo and all four screenshots loaded; four numbered steps remained in order; no page-level horizontal overflow |
+| Screenshot readability | Replaced the two-column table with full-width steps and action captions; images now occupy 838 CSS pixels on desktop and 324 on mobile, versus roughly 127–142 on mobile before the fix |
+| Full-size screenshot links | **8 click-through checks passed**; all four links opened the original 1440-pixel-wide PNG on both desktop and mobile |
+| Desktop demo playback | **Passed**; followed the README link, started the player, decoded 1280 × 720 video; playback advanced from 1.21 to 28.88 seconds |
+| Mobile demo playback | **Passed**; followed the README link and tapped Play; decoded 640 × 360 video; playback advanced from 1.03 to 28.69 seconds |
+
+The standard Drive `/view` URL returned an embedded-player error under the Android user agent. The README and capture record now link to the same authorized video's `/preview` endpoint, which played in both contexts. The final playback checks observed `paused=false`, `readyState=4`, no media error, and a duration of about 317.25 seconds. Player controls were used after initialization; early automation clicks on loading overlays were not counted as successful checks. The video and its sharing permissions were not modified.
+
+Browser screenshots were visually inspected alongside DOM assertions for image loading, dimensions, sequence and page width. These are point-in-time checks of GitHub and Drive, not a continuously monitored browser suite. Mobile emulation does not qualify physical phones, Safari or Firefox. The full video was not watched end to end, audio was not audited, and the application/backend test suites were not rerun for these documentation-only changes. The earlier synthetic screenshot and hardware-validation boundaries remain unchanged.
 
 ## Not performed
 
