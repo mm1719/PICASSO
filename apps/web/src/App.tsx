@@ -93,11 +93,13 @@ const terminalStates = new Set(['COMPLETED', 'FAILED', 'SECURITY_BLOCKED', 'CANC
 
 class HttpError extends Error {
   readonly status: number
+  readonly preflightId: string | null
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, preflightId: string | null = null) {
     super(message)
     this.name = 'HttpError'
     this.status = status
+    this.preflightId = preflightId
   }
 }
 
@@ -108,7 +110,8 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   })
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { detail?: string } | null
-    throw new HttpError(response.status, body?.detail ?? `Request failed (${response.status})`)
+    throw new HttpError(response.status, body?.detail ?? `Request failed (${response.status})`,
+      response.headers?.get('X-PICASSO-Preflight-ID') ?? null)
   }
   return response.json() as Promise<T>
 }
@@ -459,6 +462,14 @@ function App() {
         setPreflightRun((run) => run?.preflight_id === 'pending' ? null : run)
         setError('This USB is being used by another program. Save and close documents on this USB, then retry Preflight.')
       } else {
+        if (reason instanceof HttpError && reason.preflightId) {
+          // Keep the failed claim addressable: Refresh must release it before clearing selection.
+          const failedId = reason.preflightId
+          setPreflightId(failedId)
+          setPreflightRun((run) => run?.preflight_id === 'pending' ? {
+            ...run, preflight_id: failedId, status: 'failed', stage: 'failed', error: reason.message,
+          } : run)
+        }
         setError(reason instanceof Error ? reason.message : 'Preflight failed.')
       }
     } finally {
@@ -736,6 +747,7 @@ function App() {
                 <div><dt>Stage</dt><dd>{job.stage.replaceAll('_', ' ')}</dd></div>
                 <div><dt>Speed</dt><dd>{job.progress.progress_unit === 'bytes'
                   ? `${(job.progress.throughput_bytes_per_second ?? 0).toFixed(1)} bytes/s`
+                  : job.state === 'SCANNING' ? 'Calculating…'
                   : `${job.progress.images_per_second.toFixed(1)} images/s`}</dd></div>
                 <div><dt>This stage</dt><dd>{formatEta(job.progress.stage_eta_seconds, job.state)}</dd></div>
                 <div><dt>Estimated completion</dt><dd>{formatEta(job.progress.job_eta_seconds, job.state)}</dd></div>

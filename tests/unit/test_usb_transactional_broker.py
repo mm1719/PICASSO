@@ -149,6 +149,8 @@ def test_failed_claim_restores_native_view_before_returning_error(
     host_mounts = {native_mount: frozenset({"rw", "nodev", "nosuid"})}
     restored: list[tuple[str, str]] = []
 
+    monkeypatch.setattr("host.usb_mount_broker.LEASES_PATH", tmp_path / "leases.json")
+    monkeypatch.setattr("host.usb_mount_broker.MOUNT_GUARD_DIR", tmp_path / "guards")
     monkeypatch.setattr("host.usb_mount_broker._identity", lambda _request: None)
     monkeypatch.setattr("host.usb_mount_broker._lease_for", lambda _request: None)
     monkeypatch.setattr("host.usb_mount_broker._validate_owned_path", lambda _path: owned)
@@ -165,16 +167,18 @@ def test_failed_claim_restores_native_view_before_returning_error(
         "host.usb_mount_broker._mount_owned",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(BrokerError("mount failed")),
     )
-    monkeypatch.setattr(
-        "host.usb_mount_broker._restore_native",
-        lambda block, user: restored.append((block, user)),
-    )
+    def restore(block: str, user: str) -> None:
+        restored.append((block, user))
+        host_mounts[native_mount] = frozenset({"rw", "nodev", "nosuid"})
+
+    monkeypatch.setattr("host.usb_mount_broker._restore_native", restore)
 
     with pytest.raises(BrokerError, match="mount failed"):
         handle(_claim_request(), namespace_fd=4242)
 
     assert restored == [("/dev/fake1", "operator")]
     assert not owned.exists()
+    assert json.loads((tmp_path / "leases.json").read_text()) == {}
 
 
 def test_reconcile_releases_durable_lease_in_authenticated_namespace(
@@ -316,6 +320,10 @@ def test_release_retains_reconciliation_when_native_restore_fails(
     owned.mkdir()
     controlled = {owned: frozenset({"rw", "nodev", "nosuid", "noexec"})}
     saved: list[dict[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "host.usb_mount_broker._command",
+        lambda argv: subprocess.CompletedProcess(argv, 0, "uuid serial\n", ""),
+    )
 
     monkeypatch.setattr(
         "host.usb_mount_broker._mounts",
@@ -353,6 +361,10 @@ def test_release_restores_native_before_finalizing_the_lease(
     leases = {lease_key: {"lease_id": "lease"}}
     events: list[str] = []
     saved: list[dict[str, dict[str, str]]] = []
+    monkeypatch.setattr(
+        "host.usb_mount_broker._command",
+        lambda argv: subprocess.CompletedProcess(argv, 0, "uuid serial\n", ""),
+    )
 
     monkeypatch.setattr(
         "host.usb_mount_broker._mounts",

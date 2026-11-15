@@ -284,6 +284,18 @@ class _PreflightManager:
         source_relative_path: str,
         metadata_relative_path: str | None,
     ) -> _PreflightRun:
+        with self._lock:
+            pending = [
+                run.preflight_id for run in self._runs.values()
+                if run.device_id == device_id and run.reconciliation_pending
+                and run.status == "failed" and not run.transferred
+            ]
+        for preflight_id in pending:
+            try:
+                self.cancel(preflight_id)
+            except HTTPException as error:
+                error.headers = {**(error.headers or {}), "X-PICASSO-Preflight-ID": preflight_id}
+                raise
         run = _PreflightRun(
             preflight_id=uuid4().hex,
             device_id=device_id,
@@ -291,8 +303,31 @@ class _PreflightManager:
             metadata_relative_path=metadata_relative_path,
         )
         with self._lock:
+            if any(not existing.transferred and not existing.reconciled for existing in self._runs.values()):
+                raise HTTPException(status_code=409, detail="Release the previous Preflight before starting another.")
+            # Track the intent before claim: a failed reply may still leave a broker owner.
             self._runs[run.preflight_id] = run
-        run.future = self._executor.submit(self._execute, run)
+        try:
+            self.usb.request("claim", device_id=device_id)
+            run.future = self._executor.submit(self._execute, run)
+        except Exception as error:
+            with self._lock:
+                run.status = run.stage = "failed"
+                run.error = str(error)
+            try:
+                self._release_run(run)
+            except Exception as cleanup_error:
+                log.warning("claim cleanup remains pending (%s)", type(cleanup_error).__name__)
+                raise HTTPException(
+                    status_code=503, detail="USB cleanup is incomplete; retry Preflight or Refresh",
+                    headers={"X-PICASSO-Preflight-ID": run.preflight_id},
+                ) from cleanup_error
+            if isinstance(error, UsbClientError):
+                raise HTTPException(
+                    status_code=503, detail=str(error),
+                    headers={"X-PICASSO-Preflight-ID": run.preflight_id},
+                ) from error
+            raise
         return run
 
     def get(self, preflight_id: str) -> _PreflightRun | None:
@@ -304,10 +339,6 @@ class _PreflightManager:
             pending = [run.preflight_id for run in self._runs.values() if not run.transferred and not run.reconciled]
         for preflight_id in pending:
             self.cancel(preflight_id)
-
-    def has_untransferred(self) -> bool:
-        with self._lock:
-            return any(not run.transferred and not run.reconciled for run in self._runs.values())
 
     def cancel(self, preflight_id: str) -> dict[str, object]:
         with self._lock:
@@ -617,14 +648,11 @@ def create_app(settings: ApiSettings, usb: UsbOperations | None = None) -> FastA
             session.check(selection.session_id)
             if store.active_request() is not None:
                 raise HTTPException(status_code=409, detail="A job is already active.")
-            if selection.session_id is not None and preflights.has_untransferred():
-                raise HTTPException(status_code=409, detail="Release the previous Preflight before starting another.")
             result = start_preflight(device_id, selection)
             session.last_seen = time.monotonic()
             return result
 
     def start_preflight(device_id: str, selection: SourceSelection) -> object:
-        usb.request("claim", device_id=device_id)
         run = preflights.start(
             device_id,
             selection.source_relative_path,

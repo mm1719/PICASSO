@@ -20,6 +20,12 @@ The application containers are designed to be non-root and do not receive raw re
 
 The code contains path checks, no-follow handling, scan/import content binding, exclusive ownership, bounded broker operations, and verified/atomic output publication. ClamAV cannot guarantee that arbitrary input is harmless. Real scanner signatures, filesystem behavior, permission boundaries, and cleanup must be qualified on the target deployment.
 
+## Recovery validation boundary
+
+The selected source includes reviewed repairs for broker client disconnects, failed-claim cleanup and device replacement during rollback. Cleanup responsibility is persisted before native detach, malformed ledgers fail closed, and identity is rechecked before later mutations or finalization. A lost claim reply can be reconciled through the USB service; an active job must retain its authority.
+
+The API exposes only an opaque pending Preflight identifier for cleanup retry, not private broker diagnostics. Refresh must finish cleanup before unlocking selection. These behaviors are covered with fake host/transport observations and in-process HTTP tests. They do not establish installed hardware recovery or resolve the observed class of exFAT/kernel stalls. Keep this checkout on the documented inspection/test path; hardware use requires separate review and qualification. The runtime cleanup ledger survives service restart, not a promised host reboot.
+
 ## Publication hygiene
 
 The export excludes history, private deployment configuration, logs, research images, datasets, weights and runtime artifacts. Review the final source allowlist rather than relying on `.gitignore` alone. Do not publish generated caches, test output, `node_modules`, built assets, runtime archives, or real examples without separately checking their contents and permissions.

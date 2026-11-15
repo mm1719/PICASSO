@@ -16,6 +16,17 @@ A local-first research application that turns a folder of plankton images into t
 
 These are implementation features, not a claim that every deployment or recovery scenario has passed qualification.
 
+## Latest source update — 2026-11-15
+
+This showcase now includes the next reviewed, merged development changes:
+
+- Initial scanning speed stays at `Calculating…` until byte throughput is available; scanning is never presented as inference images/s.
+- A signal that triggers launcher rollback no longer also closes the restored window. The switching progress window follows its own launcher's lifetime.
+- Frontend tooling and its lockfile are updated, with the matching regression tests and dependency inventory.
+- Broker requests survive disconnected clients, failed claims retain cleanup responsibility, and rollback rechecks device identity. A failed Preflight remains addressable so Refresh can retry cleanup before enabling another selection.
+
+See the [source sync record](docs/SOURCE_SYNC.md) for the pinned source revision, included changes, and work still awaiting review. The [validation record](docs/VALIDATION.md) reports checks on this public checkout.
+
 ## Architecture
 
 ```text
@@ -49,7 +60,7 @@ python -m pip install -r requirements/showcase-dev.txt
 make test-portable PYTHON=python
 ```
 
-The exported tests use temporary files, synthetic scores, and fake operating-system/USB adapters. They do not load a model, use a GPU, require service accounts, or modify an attached USB. Dependencies need to be installed first; after that the test run itself is offline.
+The exported tests use temporary files, synthetic scores, fake operating-system/USB adapters, and an in-process API test client. Launcher tests use fake host operations and a fake GTK module; helper-process tests use temporary state. They do not open real windows, start a live API server, load a model, use a GPU, require service accounts, or modify an attached USB. Run them on Linux with the included POSIX pipe/lock support. Dependencies need to be installed first; after that the test run itself is offline.
 
 ### 2. Build and inspect the interface
 
@@ -83,6 +94,7 @@ The runtime constructs `convnextv2_large.fcmae_ft_in22k_in1k` with `pretrained=F
 - No weights, model-quality benchmark, dataset redistribution, or full experiment reproduction is provided here.
 - No claim of production readiness, complete hardware qualification, full reboot recovery validation, or project-wide 100% test coverage.
 - The copied source may contain workstation assumptions. Passing the portable test subset does not qualify host deployment.
+- The broker recovery fixes have source-level regression coverage; installed hardware recovery and exFAT/kernel-stall resolution remain unqualified. See the [recovery validation boundary](docs/SECURITY.md#recovery-validation-boundary).
 
 ## Repository guide
 

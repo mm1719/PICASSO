@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import os
+import select
 import signal
 import sys
 
@@ -13,10 +15,38 @@ from gi.repository import GLib, Gtk
 
 
 def main() -> int:
-    title = sys.argv[1] if len(sys.argv) == 2 else "PICASSO"
-    if len(sys.argv) > 2:
-        raise SystemExit("usage: plankton-switch-progress [PICASSO|PICASSO Test]")
+    if (
+        len(sys.argv) != 4
+        or sys.argv[2] != "--parent-lifetime-fd"
+    ):
+        raise SystemExit(
+            "usage: plankton-switch-progress [PICASSO|PICASSO Test] "
+            "--parent-lifetime-fd FD"
+        )
+    title = sys.argv[1]
+    try:
+        parent_fd = int(sys.argv[3])
+        os.fstat(parent_fd)
+    except (ValueError, OSError) as error:
+        raise SystemExit("parent lifetime descriptor is invalid") from error
+    if parent_fd < 0:
+        raise SystemExit("parent lifetime descriptor is invalid")
 
+    parent_watch = select.poll()
+    parent_watch.register(parent_fd, select.POLLIN | select.POLLHUP | select.POLLERR)
+    if parent_watch.poll(0):
+        os.close(parent_fd)
+        return 0
+
+    def parent_closed(_fd: int, _condition: object) -> bool:
+        Gtk.main_quit()
+        return False
+
+    GLib.io_add_watch(
+        parent_fd,
+        GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR,
+        parent_closed,
+    )
     window = Gtk.Window(title=title)
     window.set_modal(True)
     window.set_deletable(False)
@@ -46,7 +76,10 @@ def main() -> int:
     window.show_all()
     window.present()
     GLib.timeout_add(100, lambda: (progress.pulse() or True))
-    Gtk.main()
+    try:
+        Gtk.main()
+    finally:
+        os.close(parent_fd)
     return 0
 
 

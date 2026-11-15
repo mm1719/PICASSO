@@ -101,7 +101,10 @@ class UsbOwnership:
                 lease_id=lease.lease_id,
                 generation=str(lease.generation),
             )
-        result = self._broker("release", device, **values)
+        # A lost claim reply leaves cleanup authority only in the broker ledger.
+        result = self._broker("release" if lease is not None else "reconcile", device, **values)
+        if result.get("retained"):
+            raise OwnershipUnavailable("USB ownership belongs to an active job")
         released = bool(result.get("released", lease is not None))
         released_view_verified = (
             lease is not None

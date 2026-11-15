@@ -57,6 +57,7 @@ SAFE_BROKER_ERRORS = frozenset(
         "device is still mounted",
         "device remained mounted",
         "USB ownership recovery is pending",
+        "USB ownership cleanup is pending",
     }
 )
 
@@ -1358,12 +1359,12 @@ class UsbAgent:
         """Release the exclusive lease, then restore one native desktop RW mount."""
         device = self._device(device_id)
         lease = self._ownership_leases.get(device.device_id)
-        if lease is None:
-            return
         try:
             released = self._ownership.release(device, lease)
         except OwnershipError as error:
             raise UsbAgentError(str(error)) from error
+        if lease is None:
+            return
         if not released:
             raise DeviceUnavailable("USB ownership lease is unavailable")
         if not self._live_broker and lease.native_user is not None:

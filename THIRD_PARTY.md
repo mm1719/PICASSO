@@ -23,7 +23,7 @@ A library's code license is not a license for every pretrained checkpoint it can
 
 ## Frontend lockfile inventory
 
-[Machine-readable npm metadata](docs/NPM_DEPENDENCY_METADATA.json) preserves the version, registry source, integrity field and declared license for all 180 non-root entries in `apps/web/package-lock.json`, including platform-specific optional entries. Every listed entry has a license field. The declarations include MIT, MPL-2.0, Apache-2.0, BSD variants, ISC, MIT-0, BlueOak-1.0.0, CC0-1.0 and 0BSD. These are recorded metadata, not an independent verification of package contents.
+[Machine-readable npm metadata](docs/NPM_DEPENDENCY_METADATA.json), refreshed on 2026-11-15, preserves the version, registry source, integrity field and declared license for all 174 non-root entries in `apps/web/package-lock.json`, including platform-specific optional entries. Every listed entry has a license field. These are recorded metadata, not an independent verification of package contents. The source update includes Vite 8.2.4 and Vitest family 4.1.12; no new upstream license-text review was performed for this update.
 
 The final source archive excludes `node_modules` and `dist`. If a built web bundle or Docker image is later distributed, separately preserve the required notices and audit the contents actually bundled. Do not present this source inventory as that future distribution audit.
 
@@ -31,7 +31,7 @@ The final source archive excludes `node_modules` and `dist`. If a built web bund
 
 `pyproject.toml` and `requirements/runtime.lock` retain the original application and inference dependency declarations. The optional CUDA runtime includes NVIDIA packages with their own terms. No CUDA package, wheel or container base image is included, and a full transitive Python/system license audit has not been performed.
 
-The small portable test environment is separately specified in `requirements/showcase-dev.txt`; it needs pytest and Pillow, not the inference dependency stack. The new SVG contains only a plain text wordmark and simple geometry; no original artwork or font file is redistributed.
+The portable test environment is separately specified in `requirements/showcase-dev.txt`: pytest, Pillow, FastAPI/Starlette and httpx2 for in-process API regressions. It excludes the inference dependency stack. These declarations do not bundle the libraries or constitute a new transitive license review. The new SVG contains only a plain text wordmark and simple geometry; no original artwork or font file is redistributed.
 
 ## Release decisions still needed
 

@@ -14,3 +14,5 @@ Do not install those files, run `sudo`, launch Docker, change services, mount me
 The legacy image-build utility expects a real Git repository and its original release workflow. This source-only snapshot intentionally has no original history or private deployment manifests. No ready-to-run image or Docker build success is claimed.
 
 The original checkpoint/data experiments and privileged hardware QA runners are intentionally not in the public preview. Their absence must not be interpreted as passing those tests.
+
+The launcher and `plankton-switch-progress` are a matched source pair: the helper now requires the launcher's `--parent-lifetime-fd` argument. Updating one installed file without the other is unsupported. This showcase only tests the pair through fake host/GTK adapters and does not install either file.

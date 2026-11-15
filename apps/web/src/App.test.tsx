@@ -157,6 +157,7 @@ test('lost successful job POST response recovers the durable job without another
   fireEvent.click(await screen.findByRole('button', { name: 'Run preflight' }))
   fireEvent.click(await screen.findByRole('button', { name: 'Confirm and start' }))
   await waitFor(() => expect(screen.getAllByText('SCANNING')).toHaveLength(2))
+  expect(screen.getByText('Speed').nextElementSibling?.textContent).toBe('Calculating…')
   expect(fetchMock.mock.calls.filter(([path, init]) => path === '/api/v1/jobs' && init?.method === 'POST'))
     .toHaveLength(1)
   expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false)
@@ -958,6 +959,77 @@ test.each(['COMPLETED', 'FAILED', 'SECURITY_BLOCKED', 'CANCELLED'])(
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false)
   },
 )
+
+test('keeps scan rate unknown through heartbeats, then renders each polled stage in its own units', async () => {
+  baseRoutes()
+  const initial = job('CREATED')
+  let active = {
+    ...initial,
+    progress: {
+      ...initial.progress, total: 0, processed: 0, percentage: 0,
+      images_per_second: 0, progress_unit: 'images' as string | undefined,
+      total_bytes: 0, processed_bytes: 0, throughput_bytes_per_second: 0,
+      updated_at: '2026-10-28T00:00:00Z',
+    },
+  }
+  respond('POST', '/api/v1/session/open', { job: active })
+  respondWith('GET', '/api/v1/jobs/job-12345678', () => ({ body: active }))
+  const speed = () => screen.getByText('Speed').nextElementSibling?.textContent
+  const eta = (label: string) => screen.getByText(label).nextElementSibling?.textContent
+  vi.useFakeTimers()
+  try {
+    await act(async () => { render(<App />) })
+    active = { ...active, state: 'SCANNING', stage: 'SCANNING' }
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    expect(speed()).toBe('Calculating…')
+    expect(screen.queryByText(/bytes\/s$/)).toBeNull()
+    expect(eta('This stage')).toBe('Calculating…')
+    expect(eta('Estimated completion')).toBe('Calculating…')
+
+    // A heartbeat only advances its timestamp; it must not invent work, rate or ETA.
+    const beforeHeartbeat = document.querySelector('.progress-copy')?.textContent
+    active = { ...active, progress: { ...active.progress, updated_at: '2026-10-28T00:00:05Z' } }
+    await act(async () => { await vi.advanceTimersByTimeAsync(5000) })
+    expect(document.querySelector('.progress-copy')?.textContent).toBe(beforeHeartbeat)
+    expect(speed()).toBe('Calculating…')
+    expect(eta('This stage')).toBe('Calculating…')
+    expect(eta('Estimated completion')).toBe('Calculating…')
+    expect(fetchMock.mock.calls.filter(([path]) => path === '/api/v1/session/heartbeat')).toHaveLength(1)
+
+    active = { ...active, progress: { ...active.progress, total: 4, processed: 1,
+      percentage: 25, progress_unit: 'bytes', total_bytes: 4096, processed_bytes: 1024,
+      throughput_bytes_per_second: 512, stage_eta_seconds: 6, job_eta_seconds: 120 } }
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    expect(speed()).toBe('512.0 bytes/s')
+    expect(screen.getByText('1 files · 1,024 / 4,096 bytes')).toBeTruthy()
+    expect(eta('Estimated completion')).toBe('About 2 min')
+
+    active = { ...active, state: 'IMPORTING', stage: 'IMPORTING' }
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    expect(speed()).toBe('512.0 bytes/s')
+    expect(screen.getByText('1 images · 1,024 / 4,096 bytes')).toBeTruthy()
+
+    for (const state of ['VALIDATING', 'INFERENCING']) {
+      active = { ...active, state, stage: state, progress: { ...active.progress,
+        progress_unit: 'images', images_per_second: 2.5 } }
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+      expect(speed()).toBe('2.5 images/s')
+      expect(screen.getByText('1 / 4 images')).toBeTruthy()
+    }
+
+    // A restored scan may retain a legacy/missing unit and an old image rate.
+    active = { ...active, state: 'SCANNING', stage: 'SCANNING', progress: { ...active.progress,
+      progress_unit: undefined, stage_eta_seconds: null, job_eta_seconds: null } }
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    expect(speed()).toBe('Calculating…')
+    expect(screen.queryByText(/images\/s$/)).toBeNull()
+    expect(eta('This stage')).toBe('Calculating…')
+    expect(eta('Estimated completion')).toBe('Calculating…')
+  } finally {
+    cleanup()
+    vi.useRealTimers()
+  }
+})
 
 test('presents exact ETA fields as readable customer durations', async () => {
   baseRoutes()

@@ -258,15 +258,18 @@ def _reconcile_guard_markers() -> None:
 def _load_leases() -> dict[str, dict[str, str]]:
     try:
         raw = json.loads(LEASES_PATH.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
+    except FileNotFoundError:
         return {}
-    if not isinstance(raw, dict):
-        return {}
-    return {
-        str(key): {str(field): str(value) for field, value in value.items()}
-        for key, value in raw.items()
-        if isinstance(key, str) and isinstance(value, dict)
-    }
+    except (ValueError, OSError) as error:
+        raise BrokerError("ownership ledger is unavailable") from error
+    if not isinstance(raw, dict) or any(
+        not isinstance(key, str) or not isinstance(record, dict)
+        or any(not isinstance(field, str) or not isinstance(value, str)
+               for field, value in record.items())
+        for key, record in raw.items()
+    ):
+        raise BrokerError("invalid ownership ledger")
+    return raw
 
 
 def _save_leases(leases: dict[str, dict[str, str]]) -> None:
@@ -601,7 +604,7 @@ def _remove_owned_directory(path: Path) -> None:
         pass
 
 
-def _issue_lease(request: dict[str, str], owned: Path) -> dict[str, Any]:
+def _begin_claim(request: dict[str, str], owned: Path) -> dict[str, str]:
     leases = _load_leases()
     key = _lease_key(request)
     previous = leases.get(key)
@@ -616,24 +619,42 @@ def _issue_lease(request: dict[str, str], owned: Path) -> dict[str, Any]:
         "drive_device": request["drive_device"],
         "owned_root": str(owned),
         "native_user": request["native_user"],
-        "issued_at": datetime.now(UTC).isoformat(),
         "diskseq": _diskseq(request["drive_device"]),
+        "cleanup_pending": "1",
+        "cleanup_target": "native_rw" if request["native_user"] else "unmounted",
+        "transition_stage": "prepared",
     }
     leases[key] = lease
-    _guard_acquire(request["block_device"])
+    # Persist responsibility before any command can remove the native view.
+    _save_leases(leases)
+    return lease
+
+
+def _save_claim(lease: dict[str, str], **updates: str) -> None:
+    lease.update(updates)
+    leases = _load_leases()
+    leases[_lease_key(lease)] = lease
+    _save_leases(leases)
+
+
+def _record_claim_error(lease: dict[str, str], field: str, error: BaseException) -> None:
+    # Full exception chains stay in the host journal; this private ledger survives restart.
     try:
-        _save_leases(leases)
-    except BaseException:
-        _guard_release(request["block_device"])
-        raise
-    return {
-        "ok": True,
-        "owned_root": str(owned),
-        "lease_id": lease["lease_id"],
-        "generation": lease["generation"],
-        "consumer_id": SERVICE_USER,
-        "native_user": lease["native_user"],
-    }
+        _save_claim(lease, **{field: f"{type(error).__name__}: {error}"[:2048]})
+    except Exception:
+        log.exception("could not persist %s; earlier cleanup responsibility retained", field)
+
+
+def _issue_lease(request: dict[str, str], owned: Path) -> dict[str, Any]:
+    leases = _load_leases()
+    lease = leases[_lease_key(request)]
+    if lease.get("cleanup_pending") != "1" or lease.get("owned_root") != str(owned):
+        raise BrokerError("claim responsibility is unavailable")
+    for field in ("cleanup_pending", "cleanup_target", "transition_stage"):
+        lease.pop(field, None)
+    lease["issued_at"] = datetime.now(UTC).isoformat()
+    _save_leases(leases)
+    return _lease_response(lease)
 
 
 def _claim(request: dict[str, str], owned: Path, *, namespace_fd: int | None = None) -> dict[str, Any]:
@@ -641,36 +662,41 @@ def _claim(request: dict[str, str], owned: Path, *, namespace_fd: int | None = N
         raise BrokerError("consumer namespace is required")
     native_mounts = _mounts(request["block_device"])
     native_user = _native_user(native_mounts)
+    if native_mounts and not native_user:
+        raise BrokerError("native restoration owner is unavailable")
+    request["native_user"] = native_user or ""
+    lease = _begin_claim(request, owned)
     try:
+        _guard_acquire(request["block_device"])
         if native_mounts:
+            _save_claim(lease, transition_stage="detaching_native")
             _unmount_device(request["block_device"])
             if _mounts(request["block_device"]):
                 raise BrokerError("native mount is still present")
         consumer_mounts = _mounts(request["block_device"], namespace_fd)
         if owned in consumer_mounts:
             if _mounted(consumer_mounts, owned, "rw"):
-                request["native_user"] = native_user or ""
                 return _issue_lease(request, owned)
             raise BrokerError("owned mount has unsafe state")
         if owned.exists() and (not owned.is_dir() or any(owned.iterdir())):
             raise BrokerError("owned mount path is not empty")
         owned.mkdir(mode=0o700, parents=False, exist_ok=True)
         os.chown(owned, pwd.getpwnam(SERVICE_USER).pw_uid, grp.getgrnam("plankton-inference").gr_gid)
+        _save_claim(lease, transition_stage="mounting_owned")
         _mount_owned(request["block_device"], owned, namespace_fd=namespace_fd)
         consumer_mounts = _mounts(request["block_device"], namespace_fd)
         if not _mounted(consumer_mounts, owned, "rw") or _mounts(request["block_device"]):
             raise BrokerError("exclusive ownership postcondition failed")
-        request["native_user"] = native_user or ""
         return _issue_lease(request, owned)
-    except BaseException:
+    except BaseException as primary_error:
+        log.exception("claim failed lease=%s stage=%s", lease["lease_id"], lease["transition_stage"])
+        _record_claim_error(lease, "primary_error", primary_error)
         try:
-            if owned.exists() and owned in _mounts(request["block_device"], namespace_fd):
-                _unmount(owned, lazy=True, namespace_fd=namespace_fd)
-        except BrokerError:
-            log.exception("claim rollback could not remove owned mount")
-        _remove_owned_directory(owned)
-        if native_user:
-            _restore_native(request["block_device"], native_user)
+            _release(request, owned, lease=lease, namespace_fd=namespace_fd)
+        except Exception as rollback_error:
+            log.exception("claim rollback failed lease=%s; cleanup pending", lease["lease_id"])
+            _record_claim_error(lease, "rollback_error", rollback_error)
+            raise BrokerError("USB ownership cleanup is pending") from rollback_error
         raise
 
 
@@ -694,14 +720,26 @@ def _release(
     namespace_fd: int | None = None,
 ) -> dict[str, Any]:
     mounts = _mounts(request["block_device"], namespace_fd)
+    # A failed/slow claim may outlive the device which originally passed validation.
+    _identity(request)
     if owned in mounts:
         _unmount(owned, namespace_fd=namespace_fd)
         if owned in _mounts(request["block_device"], namespace_fd):
             raise BrokerError("owned mount did not release")
+    _identity(request)
     _remove_owned_directory(owned)
     native_user = lease.get("native_user", "") if lease is not None else ""
     if native_user:
         _restore_native(request["block_device"], native_user)
+    if lease is not None and lease.get("cleanup_pending"):
+        native = _mounts(request["block_device"])
+        if (
+            (native_user and (len(native) != 1 or not _native_mount_for_user(native, native_user)))
+            or (not native_user and native)
+            or owned in _mounts(request["block_device"], namespace_fd)
+        ):
+            raise BrokerError("native rollback postcondition failed")
+    _identity(request)
     leases = _load_leases()
     _remove_lease(leases, request, lease or {})
     _retire_lease_guards(lease or {}, leases, current_block=request["block_device"])
@@ -1117,6 +1155,8 @@ def _handle(request: object, *, namespace_fd: int | None = None) -> dict[str, An
     values = _validate_request(request)
     _identity(values)
     lease = _lease_for(values)
+    if lease is not None and lease.get("cleanup_pending") and values["operation"] != "reconcile":
+        raise BrokerError("USB ownership cleanup is pending")
     if values["operation"] in {"recover", "job_lease", "bind_job"}:
         if lease is None or namespace_fd is None:
             raise BrokerError("recovery ownership is unavailable")
@@ -1139,7 +1179,7 @@ def _handle(request: object, *, namespace_fd: int | None = None) -> dict[str, An
             try:
                 with _job_authority(values, lease, namespace_fd):
                     # A service restart is not revocation of an accepted job.
-                    return {"ok": True, "released": False}
+                    return {"ok": True, "released": False, "retained": True}
             except BrokerError:
                 if lease.get("job_id"):
                     # Terminal jobs use the normal cleanup path; database or
@@ -1175,8 +1215,6 @@ def _receive_request(connection: socket.socket) -> tuple[bytes, int]:
     payload, ancillary, flags, _ = connection.recvmsg(
         MAX_REQUEST_BYTES + 1, socket.CMSG_SPACE(fd_size)
     )
-    if flags & socket.MSG_CTRUNC:
-        raise BrokerError("mount namespace credential was truncated")
     namespace_fds: list[int] = []
     for level, kind, data in ancillary:
         if level != socket.SOL_SOCKET or kind != socket.SCM_RIGHTS:
@@ -1185,9 +1223,11 @@ def _receive_request(connection: socket.socket) -> tuple[bytes, int]:
         usable = len(data) - (len(data) % fd_size)
         fds.frombytes(data[:usable])
         namespace_fds.extend(int(fd) for fd in fds)
-    if len(namespace_fds) != 1:
+    if flags & socket.MSG_CTRUNC or len(namespace_fds) != 1:
         for fd in namespace_fds:
             os.close(fd)
+        if flags & socket.MSG_CTRUNC:
+            raise BrokerError("mount namespace credential was truncated")
         raise BrokerError("exactly one consumer namespace is required")
     namespace_fd = namespace_fds[0]
     try:
@@ -1230,26 +1270,29 @@ def serve() -> None:
             except TimeoutError:
                 continue
             with connection:
-                _peer_pid, peer_uid = _peer_credentials(connection)
                 namespace_fd: int | None = None
-                if peer_uid not in allowed_uids:
-                    response = {"ok": False, "error": "unauthorized mount broker peer"}
-                else:
-                    try:
-                        payload, namespace_fd = _receive_request(connection)
-                        if len(payload) > MAX_REQUEST_BYTES or not payload.endswith(b"\n"):
-                            raise BrokerError("invalid mount broker request")
-                        response = handle(json.loads(payload.decode()), namespace_fd=namespace_fd)
-                    except (BrokerError, UnicodeDecodeError, json.JSONDecodeError) as error:
-                        log.warning("request rejected: %s", error)
-                        response = {"ok": False, "error": str(error)}
-                    except Exception:
-                        log.exception("request failed")
-                        response = {"ok": False, "error": "mount broker operation failed"}
-                    finally:
-                        if namespace_fd is not None:
-                            os.close(namespace_fd)
-                connection.sendall((json.dumps(response, separators=(",", ":")) + "\n").encode())
+                try:
+                    _peer_pid, peer_uid = _peer_credentials(connection)
+                    if peer_uid not in allowed_uids:
+                        raise BrokerError("unauthorized mount broker peer")
+                    payload, namespace_fd = _receive_request(connection)
+                    if len(payload) > MAX_REQUEST_BYTES or not payload.endswith(b"\n"):
+                        raise BrokerError("invalid mount broker request")
+                    response = handle(json.loads(payload.decode()), namespace_fd=namespace_fd)
+                except (BrokerError, UnicodeDecodeError, json.JSONDecodeError) as error:
+                    log.warning("request rejected: %s", error)
+                    response = {"ok": False, "error": str(error)}
+                except Exception:
+                    log.exception("request failed")
+                    response = {"ok": False, "error": "mount broker operation failed"}
+                finally:
+                    if namespace_fd is not None:
+                        os.close(namespace_fd)
+                try:
+                    connection.sendall((json.dumps(response, separators=(",", ":")) + "\n").encode())
+                except OSError as error:
+                    # Delivery failure cannot revoke a committed transition or stop the listener.
+                    log.warning("broker peer transport failed: %s", type(error).__name__)
     try:
         SOCKET_PATH.unlink()
     except FileNotFoundError:

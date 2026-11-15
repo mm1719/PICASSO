@@ -8,6 +8,12 @@ USB operations are delegated to a restricted host service over a Unix socket. Th
 
 Failure and recovery paths include partial transitions, interrupted output publication, disconnected devices, stale leases and persisted mount provenance. These are implementation mechanisms, not a guarantee of successful recovery for every host configuration.
 
+The broker records failed-claim cleanup responsibility before detaching the native view and isolates connection errors from its listener. Rollback rechecks the live device identity at slow boundaries. The USB service can reconcile a lost claim reply without a local lease; an accepted nonterminal job retains ownership. If initial Preflight cleanup fails, the API returns HTTP 503 with an opaque `X-PICASSO-Preflight-ID`. The UI retains that run and Refresh releases it before enabling another selection.
+
+The UI distinguishes scan/import byte throughput from validation/inference image throughput. An initial or restored scan without trustworthy byte progress displays `Calculating…`; heartbeat timestamps do not invent completed work or an ETA.
+
+The desktop launcher records runtime-switch transactions and supervises the restored GUI after rollback. Signals are tracked by generation so an interruption consumed by rollback does not close the restored window; a new interruption still applies. Its progress helper receives a dedicated lifetime pipe and exits when that launcher closes or loses the pipe. These paths are exercised with fake host/GTK adapters in the public tests.
+
 ## Data contract
 
 - Input candidates are supported PNG/JPEG files or matching signatures; images are decoded and validated individually.

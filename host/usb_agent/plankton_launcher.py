@@ -314,11 +314,11 @@ class Launcher:
         self.store = store
         self.gui_timeout = gui_timeout
         self.monotonic = monotonic
-        self._interrupted = False
+        self._signal_generation = 0
         self._active_transaction: Transaction | None = None
 
     def handle_signal(self, _signum: int, _frame: Any = None) -> None:
-        self._interrupted = True
+        self._signal_generation += 1
 
     def _reconcile(self, transaction: Transaction) -> None:
         identity = _record_identity(transaction)
@@ -430,7 +430,9 @@ class Launcher:
             signal.signal(signum, handler)
 
     def run(self, target: Mode) -> str:
+        signal_generation = self._signal_generation
         previous_handlers = self._install_signal_handlers()
+        supervision_signal_generation = signal_generation
         deferred_error: BaseException | None = None
         try:
             descriptor = self.store.acquire()
@@ -482,7 +484,7 @@ class Launcher:
                     self.host.switch_runtime(target)
                     transaction = replace(transaction, phase="GUI_STARTING")
                     self.store.save(transaction)
-                    if self._interrupted:
+                    if self._signal_generation != signal_generation:
                         raise LauncherError("launch interrupted")
                     try:
                         gui = self.host.launch_gui(target, transaction.transaction_id)
@@ -498,11 +500,11 @@ class Launcher:
                         pid_start_time=identity.start_time,
                     )
                     self.store.save(transaction)
-                    if self._interrupted:
+                    if self._signal_generation != signal_generation:
                         raise LauncherError("target GUI launch interrupted before becoming visible")
                     if not self.host.wait_gui_visible(gui, self.gui_timeout):
                         raise LauncherError("target GUI did not become visible")
-                    if self._interrupted:
+                    if self._signal_generation != signal_generation:
                         raise LauncherError("target GUI launch interrupted before becoming visible")
                     transaction = replace(
                         transaction,
@@ -512,6 +514,7 @@ class Launcher:
                     self.store.save(transaction)
                     self.host.audit("committed", transaction.transaction_id, mode=target, phase=transaction.phase)
                 except BaseException as error:
+                    supervision_signal_generation = self._signal_generation
                     restored = self._rollback(
                         transaction, gui, restore_previous_gui=previous_gui is not None
                     )
@@ -535,7 +538,7 @@ class Launcher:
                 return "started"
             identity = _record_identity(transaction)
             while not self.host.gui_exited(gui):
-                if self._interrupted:
+                if self._signal_generation != supervision_signal_generation:
                     if identity is not None:
                         self.host.cleanup_gui(identity)
                     descriptor = self.store.acquire()
@@ -590,6 +593,7 @@ class _ProductionGui:
 @dataclass(slots=True)
 class _ProductionProgress:
     process: subprocess.Popen[str]
+    lifetime_fd: int | None
 
 
 class ProductionHost:
@@ -725,21 +729,34 @@ class ProductionHost:
 
     def start_progress(self, mode: Mode, _transaction_id: str) -> ProgressHandle:
         label = "PICASSO Test" if mode == "test" else "PICASSO"
-        return _ProductionProgress(
-            subprocess.Popen(
-                ("/usr/local/sbin/plankton-switch-progress", label),
+        read_fd, lifetime_fd = os.pipe()
+        try:
+            process = subprocess.Popen(
+                (
+                    "/usr/local/sbin/plankton-switch-progress",
+                    label,
+                    "--parent-lifetime-fd",
+                    str(read_fd),
+                ),
                 close_fds=True,
+                pass_fds=(read_fd,),
                 text=True,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-        )
+        except OSError:
+            os.close(read_fd)
+            os.close(lifetime_fd)
+            raise
+        os.close(read_fd)
+        return _ProductionProgress(process, lifetime_fd)
 
     def close_progress(self, progress: ProgressHandle) -> None:
         if not isinstance(progress, _ProductionProgress):
             raise LauncherError("production adapter received an unknown progress handle")
-        if progress.process.poll() is None:
-            progress.process.terminate()
+        if progress.lifetime_fd is not None:
+            os.close(progress.lifetime_fd)
+            progress.lifetime_fd = None
         try:
             progress.process.wait(timeout=3)
         except subprocess.TimeoutExpired:
