@@ -27,7 +27,7 @@ All synchronized implementation and package files match the selected source byte
 
 ## Public adaptations retained
 
-- Generic deployment placeholders and plain text replacement wordmark.
+- Generic deployment placeholders. The initial plain text wordmark was subsequently replaced with the owner-approved original SVG in the showcase presentation update below.
 - Loopback frontend with no default API proxy.
 - Synthetic score fixture and portable test selection, including mocked service-account lookups.
 - Showcase-specific Makefile, Python test settings, development requirements and documentation.
@@ -37,7 +37,11 @@ All synchronized implementation and package files match the selected source byte
 
 The selected merged source includes the independently reviewed broker disconnect, device-identity and failed-claim cleanup repairs. Their source acceptance does not qualify installed hardware recovery or establish that an exFAT/kernel stall is fixed; see [security boundaries](SECURITY.md#recovery-validation-boundary). Unmerged future work remains outside this snapshot.
 
-Private hardware/desktop QA automation, internal reports, decision logs, release manifests, datasets, checkpoints and original artwork remain excluded. The public maintainer's [decision log](../decision_logs/public_maintainer_decision_log.md) records only this showcase's publication decisions.
+Private hardware/desktop QA automation, internal reports, decision logs, release manifests, datasets and checkpoints remain excluded. The public maintainer's [decision log](../decision_logs/public_maintainer_decision_log.md) records the source-sync publication decisions.
+
+## Showcase presentation update — 2026-11-15
+
+After the source sync and README restructuring, the owner approved restoring `apps/web/src/assets/logo_picasso.svg` and linking the September 2026 v1 beta demo hosted on Google Drive. The original SVG replaces the temporary wordmark without changing application logic. Four new screenshots render the public frontend with synthetic API responses and a simulation banner; they are not extracted from private research runs or from the historical video. The [capture record](screenshots/README.md) documents their source, reproduction and limits. No additional development implementation changes were imported in this presentation update.
 
 ## Next update
 

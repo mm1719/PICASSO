@@ -2,7 +2,7 @@
 
 ## Scope
 
-This source-only candidate references dependencies but does not bundle dependency packages, compiled frontend output, container images, model weights, research data, or the original logo. Dependency code installed locally for validation is excluded from the deliverable. This file is an inventory, not a license grant or a complete license-compliance opinion.
+This source-only candidate references dependencies but does not bundle dependency packages, compiled frontend output, container images, model weights or research data. It includes the owner-approved original SVG logo and synthetic interface screenshots. Dependency code installed locally for validation is excluded from the deliverable. This file is an inventory, not a license grant or a complete license-compliance opinion.
 
 No project-wide code license was present in the original tracked source. No new license has been assigned. The project owner confirmed institutional approval for source publication. No additional code-reuse license has been selected or granted by this preparation. Static inspection did not identify attributed vendored source, but it cannot establish originality or ownership of every line.
 
@@ -31,9 +31,15 @@ The final source archive excludes `node_modules` and `dist`. If a built web bund
 
 `pyproject.toml` and `requirements/runtime.lock` retain the original application and inference dependency declarations. The optional CUDA runtime includes NVIDIA packages with their own terms. No CUDA package, wheel or container base image is included, and a full transitive Python/system license audit has not been performed.
 
-The portable test environment is separately specified in `requirements/showcase-dev.txt`: pytest, Pillow, FastAPI/Starlette and httpx2 for in-process API regressions. It excludes the inference dependency stack. These declarations do not bundle the libraries or constitute a new transitive license review. The new SVG contains only a plain text wordmark and simple geometry; no original artwork or font file is redistributed.
+The portable test environment is separately specified in `requirements/showcase-dev.txt`: pytest, Pillow, FastAPI/Starlette and httpx2 for in-process API regressions. It excludes the inference dependency stack. These declarations do not bundle the libraries or constitute a new transitive license review.
+
+## Presentation assets
+
+On 2026-11-15, the owner explicitly approved publication of the original SVG logo and linking the historical v1 beta demo video. The SVG contains paths and inline styles; no font file, embedded raster image, script or external resource is included. This replaces the initial plain text wordmark. The video remains on Google Drive, with its existing sharing settings unchanged.
+
+The four [interface screenshots](docs/screenshots/README.md) were captured from the real frontend using synthetic API responses and a visible simulation banner. They contain no research image samples or real device/job data. Publication approval does not assign an artwork, video or project code-reuse license.
 
 ## Release decisions still needed
 
 - This publication is a viewable source showcase without an assigned open-source license. A future reuse-license choice needs separate approval. Do not call the current repository open source.
-- Review any newly added weights, dataset samples, screenshots, binary bundle, or container image separately. None is part of this candidate.
+- Review any future weights, dataset samples, additional presentation assets, binary bundle or container image separately. Model weights, datasets, binary bundles and container images are not part of this candidate.

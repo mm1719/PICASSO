@@ -18,6 +18,10 @@ release.env
 *.jpg
 *.jpeg
 *.png
+!docs/screenshots/01-select-source.png
+!docs/screenshots/02-review-preflight.png
+!docs/screenshots/03-follow-progress.png
+!docs/screenshots/04-review-results.png
 *.gif
 *.webp
 *.tif

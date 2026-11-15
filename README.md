@@ -1,5 +1,7 @@
 # PICASSO
 
+<img src="apps/web/src/assets/logo_picasso.svg" alt="PICASSO logo" width="520">
+
 **Turn a folder of plankton images into traceable classification results.**
 
 *Plankton Image Classification & Analysis System for Scientific Observation*
@@ -13,6 +15,22 @@ PICASSO is a side project for researchers processing image batches on a local Ub
 A research image batch needs a reliable path from source files to usable results: preserve each image's identity, join optional metadata, record unreadable images, save progress across interruptions, and verify the exported files. Removable media and a GPU shared with training add device-ownership and resource-coordination problems.
 
 PICASSO implements these steps around the classifier, with explicit job states and traceable CSV/JSON outputs.
+
+## See the workflow
+
+**[Watch the v1 beta demo on Google Drive](https://drive.google.com/file/d/1i3bz5awIcIcf7QZb3rSTd7moFuEhFYoC/view)** — about 5 minutes, recorded in September 2026. This owner-approved historical recording shows the interface, desktop handoff and exported files. It predates the current source snapshot and is not validation of this checkout or a model benchmark.
+
+The screenshots below use the **current public frontend with synthetic API responses**. No research images, model weights or real device data were used. All names, paths, counts, speed and storage values are illustrative; the simulated completion screen does not prove an actual export. Click an image to enlarge it.
+
+| 1. Select a source | 2. Review preflight |
+| --- | --- |
+| [![Select the synthetic DEMO USB folder and optional metadata CSV](docs/screenshots/01-select-source.png)](docs/screenshots/01-select-source.png) | [![Review a synthetic 12-image batch, available storage and the Confirm and start button](docs/screenshots/02-review-preflight.png)](docs/screenshots/02-review-preflight.png) |
+| Choose an image folder and optionally supply a metadata CSV path. | Check the image count and local storage requirement before starting. |
+| **3. Follow the job** | **4. Review completion** |
+| [![Simulated inference at 50 percent with stage progress, speed and rejection count](docs/screenshots/03-follow-progress.png)](docs/screenshots/03-follow-progress.png) | [![Simulated completion with prediction and rejection totals, archive path and score caveat](docs/screenshots/04-review-results.png)](docs/screenshots/04-review-results.png) |
+| Track the current stage, processed images and rejected inputs. An unknown overall ETA remains `Calculating…`. | Review the export summary, local archive location and reminder that scores are uncalibrated. |
+
+The capture uses the real interface, with only a demo label added above it. [Capture source, reproduction steps and scope](docs/screenshots/README.md) explain how these images were made. The historical video and synthetic screenshots are separate demonstrations.
 
 ## What it does
 
@@ -76,8 +94,9 @@ The latest recorded source validation, **2026-11-15**, covers the curated public
 | Portable Python tests | **373 passed** across 25 modules, using synthetic data and fake host/USB adapters |
 | Frontend unit tests | **49 passed** across 4 files, with mocked API interactions |
 | Frontend lint, TypeScript and Vite build | **Passed** |
+| Synthetic screenshot walkthrough | **1 Playwright test passed**, capturing the four states above with all API calls mocked |
 
-These are source-level checks. No model-quality benchmark, real inference, GPU, physical USB, live API integration, browser end-to-end, host reboot, or deployment validation was performed for this public snapshot. Fresh Python dependency installation, full coverage, mutation testing, dependency-vulnerability and penetration audits were also not performed. There is no production-readiness or project-wide 100% coverage claim.
+These are source-level and mocked-browser checks. No model-quality benchmark, real inference, GPU, physical USB, live API integration, browser-to-backend end-to-end, host reboot, or deployment validation was performed for this public snapshot. Fresh Python dependency installation, full coverage, mutation testing, dependency-vulnerability and penetration audits were also not performed. There is no production-readiness or project-wide 100% coverage claim.
 
 The supported design scope is **one local machine, one user, and one active inference job**. It has no authentication or multi-tenant isolation and must not be exposed as a public-network service. Workstation assumptions remain in the reference source. Broker recovery has regression coverage, but installed hardware recovery and exFAT/kernel-stall resolution remain unqualified.
 
@@ -134,6 +153,6 @@ The adapter constructs `convnextv2_large.fcmae_ft_in22k_in1k` with `pretrained=F
 
 ## Publication and licensing
 
-This showcase excludes research images, datasets, trained weights, private deployment configuration and original development history. It does not provide full experiment reproduction. The plain text wordmark replaces the original artwork, which is not included.
+The repository excludes research images, datasets, trained weights, private deployment configuration and original development history. It does not provide full experiment reproduction. The owner approved publication of the original SVG logo and the external historical demo link; the new screenshots use synthetic data. Publication of these presentation materials does not grant a separate reuse license.
 
 **No open-source license has been assigned.** Public visibility does not grant an additional code-reuse license; a future license requires a separate rights-holder decision. Dependencies retain their own terms. The [third-party inventory](THIRD_PARTY.md) records available metadata without granting rights to code, datasets, weights or artwork.

@@ -2,7 +2,7 @@
 
 Updated 2026-11-15 for the public source sync described in [SOURCE_SYNC.md](SOURCE_SYNC.md). Checks below ran against this public checkout, including its sanitization and curated tests. They do not qualify an installed release.
 
-## Completed checks
+## Source-sync checks
 
 | Check | Result | Scope |
 | --- | --- | --- |
@@ -23,7 +23,7 @@ Frontend validation used Node 20.20.2 and npm 10.8.2. Dependencies were installe
 ## Snapshot adaptations
 
 - Private desktop-account/host identifiers and the deployment checkpoint hash remain generic placeholders. No live deployment files were changed.
-- The original artwork remains replaced by a plain text SVG wordmark.
+- The source-sync checks used a plain text replacement wordmark. The later presentation update below restores the owner-approved original SVG.
 - The Vite preview retains no API proxy, preventing accidental connection to an already-running inference service.
 - The test suite remains a deliberate portable subset. Launcher lifecycle tests were added with fake host operations; progress-helper subprocesses import a fake GTK module and open no real window. These tests require Linux/POSIX behavior and do not validate installed desktop integration.
 - The original checkpoint-output fixture remains excluded. The synthetic score fixture does not validate model inference.
@@ -31,11 +31,25 @@ Frontend validation used Node 20.20.2 and npm 10.8.2. Dependencies were installe
 - A private hostname in three synthetic launcher window-list rows was replaced with `workstation`; test assertions and behavior were preserved.
 - The API cleanup test inlines its temporary `ApiSettings` fixture instead of importing an unexported integration module. The HTTP assertions are preserved and use an in-process test client with a fake USB transport; no live API server is started.
 
-The publication scan checked text-only file membership and recorded file hashes. Pattern matching is not proof that every possible secret or vulnerability is absent. Syntax checks are not full backend lint or type checking.
+The source-sync publication scan checked text-only file membership and recorded file hashes. Pattern matching is not proof that every possible secret or vulnerability is absent. Syntax checks are not full backend lint or type checking.
+
+## Screenshot and logo update — 2026-11-15
+
+The later presentation update adds four synthetic screenshots, the original SVG logo with the owner's publication approval, and an owner-approved external link to the historical v1 beta video. The [capture record](screenshots/README.md) provides the exact starting commit, fixture and reproduction command.
+
+| Check | Result | Scope |
+| --- | --- | --- |
+| Playwright screenshot walkthrough | **1 passed** | Source selection, preflight, job creation, progress, completion and reset; all API responses synthetic |
+| Screenshot review | **4 images reviewed** | Simulation labels, complete page content, synthetic paths/counts, no research images or desktop content |
+| Frontend lint and TypeScript + Vite build | **Passed** | Rechecked with the restored original SVG; generated output excluded |
+| SVG inspection | **Passed** | Vector paths and inline styles; no scripts, external references, embedded images or fonts |
+| Publication and link checks | **Passed** | 139 public files; only four explicitly allowed PNGs, no PNG metadata, no configured private-content pattern hits, local Markdown links resolve |
+
+The capture blocked unmocked API/external HTTP requests and disabled service workers. It used an isolated loopback Vite server with no proxy and did not start the API or worker. The first attempt could not start Vite under restricted execution. A subsequent fixture expectation incorrectly assumed the workstation-status card polls; it was corrected to reflect the existing initial-load behavior. The successful run used the unchanged application with synthetic responses, and the images were then reviewed. These checks do not expand the earlier Python or unit-test counts, and the full existing browser suite was not rerun.
 
 ## Not performed
 
-No model loading, training or inference; no GPU use; no physical USB, malware, reboot, deployment or service mutation; no Docker image build; no API live integration suite; no browser end-to-end run; no backend Ruff/Mypy run; no full coverage, mutation, CVE or penetration audit.
+No model loading, training or inference; no GPU use; no physical USB, malware, reboot, deployment or service mutation; no Docker image build; no API live integration suite; no browser-to-backend end-to-end run; no backend Ruff/Mypy run; no full coverage, mutation, CVE or penetration audit. The mocked screenshot test above is an interface demonstration, not an installed-system test.
 
 The reviewed broker disconnect and failed-claim cleanup source repairs are included. Their portable regressions do not resolve the hardware and kernel qualification limits in [SECURITY.md](SECURITY.md#recovery-validation-boundary).
 
