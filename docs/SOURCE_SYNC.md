@@ -1,5 +1,19 @@
 # Source sync record
 
+## Latest development review — 2026-11-15 14:23 CST
+
+Both repositories were fetched again before reviewing newly merged work.
+
+| Reference | Revision |
+| --- | --- |
+| Public checkout reviewed | `a1b781d926f63ae523d18ddb0a35cd400ea08afb` |
+| Latest reviewed development main | `7bb441b36a2d10d2f35f09f2b9f2b435a9ed4f92` |
+| Retained implementation baseline | `7d2697cb52ef5fd45b6051eae33404b292623e60` |
+
+The complete development delta contains **8 commits and 5 changed internal documentation files**: installation reports, a tester handoff and role decision records. Application, host, test, build, configuration and dependency sources are unchanged. There is no new implementation or regression test to import; the public implementation baseline therefore stays at the revision above. The fetched implementation and testing branches contain no additional commits outside the reviewed main.
+
+The completed development milestones are a reported installed USB-ownership gate pass and preparation of an immutable test candidate. The next physical-lifecycle and large-batch campaign remains pending a native desktop-mount authorization prerequisite. This update publishes only a summary and the [validation boundary](VALIDATION.md#development-status-review--2026-11-15). Private reports, deployment identities, manifests and hardware evidence remain excluded; their results are not added to the public test totals or treated as production qualification.
+
 ## 2026-11-15 update
 
 This repository is a maintained source showcase. Updates select reviewed, merged development work and keep the public adaptations needed for independent inspection. Original development history, private reports and deployment records are not imported.
@@ -45,4 +59,4 @@ After the source sync and README restructuring, the owner approved restoring `ap
 
 ## Next update
 
-Fetch both repositories, compare against the development revision above, and select newly reviewed and merged work. Preserve public adaptations, bring the relevant portable regressions with each code change, regenerate dependency metadata when its lockfile changes, and rerun the public checks. Review all tracked files and the final diff for private content before publishing. Record the new source revision and actual results; source publication does not approve a deployment.
+Fetch both repositories and compare new work against the latest reviewed development main above, retaining the implementation baseline separately. Select newly reviewed and merged implementation changes when available. Preserve public adaptations, bring the relevant portable regressions with each code change, regenerate dependency metadata when its lockfile changes, and rerun affected public checks. Review all tracked files and the final diff for private content before publishing. Record the new reviewed revision and actual results; source publication does not approve a deployment.

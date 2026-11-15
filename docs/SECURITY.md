@@ -26,6 +26,8 @@ The selected source includes reviewed repairs for broker client disconnects, fai
 
 The API exposes only an opaque pending Preflight identifier for cleanup retry, not private broker diagnostics. Refresh must finish cleanup before unlocking selection. These behaviors are covered with fake host/transport observations and in-process HTTP tests. They do not establish installed hardware recovery or resolve the observed class of exFAT/kernel stalls. Keep this checkout on the documented inspection/test path; hardware use requires separate review and qualification. The runtime cleanup ledger survives service restart, not a promised host reboot.
 
+The latest reviewed development records separately report an installed USB-ownership gate pass and preparation of a test candidate. Full physical-lifecycle and large-batch qualification remains pending a native desktop-mount authorization prerequisite. That limited deployment result does not resolve the historical stall or qualify this public checkout for production; see the [development status review](VALIDATION.md#development-status-review--2026-11-15).
+
 ## Publication hygiene
 
 The export excludes history, private deployment configuration, logs, research images, datasets, weights and runtime artifacts. Review the final source allowlist rather than relying on `.gitignore` alone. Do not publish generated caches, test output, `node_modules`, built assets, runtime archives, or real examples without separately checking their contents and permissions.

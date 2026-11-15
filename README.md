@@ -114,7 +114,9 @@ The latest recorded source validation, **2026-11-15**, covers the curated public
 
 These are source-level and mocked-browser checks. No model-quality benchmark, real inference, GPU, physical USB, live API integration, browser-to-backend end-to-end, host reboot, or deployment validation was performed for this public snapshot. Fresh Python dependency installation, full coverage, mutation testing, dependency-vulnerability and penetration audits were also not performed. There is no production-readiness or project-wide 100% coverage claim.
 
-The supported design scope is **one local machine, one user, and one active inference job**. It has no authentication or multi-tenant isolation and must not be exposed as a public-network service. Workstation assumptions remain in the reference source. Broker recovery has regression coverage, but installed hardware recovery and exFAT/kernel-stall resolution remain unqualified.
+**Development status, 2026-11-15:** separately reviewed deployment records report a passed installed USB-ownership gate and a prepared test candidate. Further physical-lifecycle and large-batch checks remain pending a desktop mount-authorization prerequisite. The latest merged delta is documentation-only; these records do not add to the public test results above. See the [development status and limits](docs/VALIDATION.md#development-status-review--2026-11-15).
+
+The supported design scope is **one local machine, one user, and one active inference job**. It has no authentication or multi-tenant isolation and must not be exposed as a public-network service. Workstation assumptions remain in the reference source. Broker recovery has regression coverage, but full hardware recovery and historical exFAT/kernel-stall resolution remain unqualified.
 
 The [validation record](docs/VALIDATION.md) gives exact environments, adaptations and exclusions. The [source sync record](docs/SOURCE_SYNC.md) tracks the reviewed development revision and changes included in this showcase.
 

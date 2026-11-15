@@ -11,7 +11,7 @@ The following source is retained to show the engineering design, but is outside 
 
 Do not install those files, run `sudo`, launch Docker, change services, mount media or point to real checkpoint paths while following the showcase. A separate deployment review must cover accounts, UID/GID allocation, desktop-session permissions, source paths, immutable build references, storage/retention, trusted checkpoints, ClamAV freshness, CUDA compatibility and hardware qualification. `operator` and other example values are placeholders, not a supported default installation.
 
-The legacy image-build utility expects a real Git repository and its original release workflow. This source-only snapshot intentionally has no original history or private deployment manifests. No ready-to-run image or Docker build success is claimed.
+The legacy image-build utility expects a real Git repository and its original release workflow. This source-only snapshot intentionally has no original history or private deployment manifests. No ready-to-run public image or successful Docker build of this curated checkout is claimed. The separately reported development candidate installation does not validate this showcase's deployment placeholders; native desktop-mount authorization remains an open prerequisite in the latest [development handoff summary](VALIDATION.md#development-status-review--2026-11-15).
 
 The original checkpoint/data experiments and privileged hardware QA runners are intentionally not in the public preview. Their absence must not be interpreted as passing those tests.
 

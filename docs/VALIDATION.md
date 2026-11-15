@@ -77,6 +77,22 @@ No model loading, training or inference; no GPU use; no physical USB, malware, r
 
 The reviewed broker disconnect and failed-claim cleanup source repairs are included. Their portable regressions do not resolve the hardware and kernel qualification limits in [SECURITY.md](SECURITY.md#recovery-validation-boundary).
 
+## Development status review — 2026-11-15
+
+A subsequent fetch reviewed development main `7bb441b36a2d10d2f35f09f2b9f2b435a9ed4f92` against the retained implementation baseline `7d2697cb52ef5fd45b6051eae33404b292623e60`. The full delta contains only five internal documentation files across eight commits. There are no application, host, test, build, configuration or dependency changes, and no changed path overlaps the public file set. The fetched implementation/testing branches contain no additional commits beyond that main.
+
+The merged records report the following **separate development-deployment milestones**, not new executions against this curated public checkout:
+
+| Development milestone | What it establishes and what remains open |
+| --- | --- |
+| Installed USB-ownership gate passed on the retained implementation baseline | Reported checks cover ownership isolation, recovery/refusal/retry paths and cleanup in that deployment. They do not establish full physical-lifecycle acceptance, model quality, capacity or resolution of the historical large-batch/kernel stall. |
+| Immutable test candidate prepared and installed | A candidate is available for the next hardware campaign. Installation is not acceptance of that campaign or production promotion. |
+| Device returned; native mount still requires authorization | The latest handoff leaves desktop-session mount authentication as a prerequisite before the physical-lifecycle/large-batch campaign can start. This is a host QA prerequisite, not evidence of a new application regression or a completed recovery fix. |
+
+Only this summary is published. Private test counts, manifests, image identities, device identifiers, deployment paths and raw evidence are excluded. The public **373 Python tests, 49 frontend unit tests and one synthetic screenshot test** remain the previously recorded results for their stated scopes. No application tests, build, browser playback or hardware campaign was rerun for this documentation-only refresh, and no installed runtime was inspected or modified by the public-maintenance task.
+
+Refresh verification covered all 140 public files: only five documentation files changed, and the other 135 files match the pre-review public commit byte-for-byte. All 36 local file/anchor references and patch-whitespace checks passed; publication-pattern scanning found no configured private-content hits. Pattern matching is not proof that every possible secret is absent. The reviewed main and implementation baseline remain distinct in [SOURCE_SYNC.md](SOURCE_SYNC.md), so documentation-only development progress is not represented as a new public implementation release.
+
 ## Previous public baseline
 
 The initial 2026-11-14 public commit `da833aee2a77fec8e1d6d364c9df2c72082d02fc` recorded 271 portable Python tests and 43 frontend unit tests passing. Those historical counts belong to that snapshot; the table above records this update's fresh results.
