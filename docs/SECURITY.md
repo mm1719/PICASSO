@@ -20,13 +20,21 @@ The application containers are designed to be non-root and do not receive raw re
 
 The code contains path checks, no-follow handling, scan/import content binding, exclusive ownership, bounded broker operations, and verified/atomic output publication. ClamAV cannot guarantee that arbitrary input is harmless. Real scanner signatures, filesystem behavior, permission boundaries, and cleanup must be qualified on the target deployment.
 
+Portable API/socket/worker regressions show that Preflight alone, cancellation and session close do not publish results in the normal workflow. Only an explicitly confirmed job publishes a new result directory while preserving prior data. These tests do not establish OS-enforced write confinement; isolated guest writer research is not part of this implementation.
+
+## Desktop-session limitation
+
+Automatic Files closure now requires exactly one session for the account, in addition to the existing matching UID, active desktop and `Remote=no` checks. Multiple sessions (including an additional SSH/TTY login), remote sessions and unknown session properties are refused. Busy guidance tells local and remote users to save work, close Files windows showing the USB, and explicitly retry Preflight; returning focus does not trigger a retry.
+
+This is a conservative guard on a **per-user** quit command. A unique local login does not prove which session initiated Preflight or restrict closure to a particular blocking Files window/tab. Precise origin/target verification remains unresolved; the public tests simulate commands and do not qualify real desktop behavior.
+
 ## Recovery validation boundary
 
 The selected source includes reviewed repairs for broker client disconnects, failed-claim cleanup and device replacement during rollback. Cleanup responsibility is persisted before native detach, malformed ledgers fail closed, and identity is rechecked before later mutations or finalization. A lost claim reply can be reconciled through the USB service; an active job must retain its authority.
 
 The API exposes only an opaque pending Preflight identifier for cleanup retry, not private broker diagnostics. Refresh must finish cleanup before unlocking selection. These behaviors are covered with fake host/transport observations and in-process HTTP tests. They do not establish installed hardware recovery or resolve the observed class of exFAT/kernel stalls. Keep this checkout on the documented inspection/test path; hardware use requires separate review and qualification. The runtime cleanup ledger survives service restart, not a promised host reboot.
 
-The latest reviewed development records separately report an installed USB-ownership gate pass and preparation of a test candidate. Full physical-lifecycle and large-batch qualification remains pending a native desktop-mount authorization prerequisite. That limited deployment result does not resolve the historical stall or qualify this public checkout for production; see the [development status review](VALIDATION.md#development-status-review--2026-11-15).
+The latest reviewed development records add controlled WebKit and isolated guest research, while installed desktop acceptance, full physical-lifecycle and large-batch qualification remain incomplete. The earlier ownership-gate pass belongs to its exact historical deployment. None resolves the historical stall or qualifies this public checkout for production; see the [development status review](VALIDATION.md#development-status-review--2026-11-23).
 
 ## Publication hygiene
 

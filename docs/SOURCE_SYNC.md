@@ -1,6 +1,35 @@
 # Source sync record
 
-## Latest development review — 2026-11-15 14:23 CST
+## Latest development review — 2026-11-23
+
+Both repositories were fetched before comparing the merged development source with the previous public snapshot.
+
+| Reference | Revision |
+| --- | --- |
+| Previous public commit | `ee74a0d68be44530a1867ad505d2f636b1b6af7a` |
+| Previously reviewed development main | `7bb441b36a2d10d2f35f09f2b9f2b435a9ed4f92` |
+| Previous implementation baseline | `7d2697cb52ef5fd45b6051eae33404b292623e60` |
+| Latest reviewed development main | `6a518f72e645761a4adb4d182b9188dec5a4c877` |
+| Selected implementation baseline | `7e83edda5ad14b7a439b36f6dac8dca8585975a9` |
+
+The delta since the previous review contains **38 commits and 30 changed files**. Two product files changed; most remaining work is private desktop/hardware QA. This curated update includes:
+
+| Completed source work | Public files |
+| --- | --- |
+| Explain manual Files closure and explicit Preflight retry on both local and remote desktops; focus/waiting must not retry or start a job | `apps/web/src/App.tsx`, `RemotePreflightGuidance.test.tsx` |
+| Refuse per-user automatic Files closure when the account has multiple sessions; retain the existing active/local session checks | `host/usb_mount_broker.py`, `tests/unit/test_issue329_remote_session_policy.py` |
+| Exercise insufficient-space retry only after prior cleanup, and hold a zero-image release response across a second Refresh click | `apps/web/e2e/app.spec.ts` |
+| Verify that reviewed/cancelled/closed Preflight does not publish outputs; an explicitly confirmed job publishes a new result directory and preserves existing data | `tests/integration/test_preflight_export_boundary.py` |
+
+The first five source/test files match the selected development revision byte-for-byte. The integration test retains every upstream test assertion and reuses the exported fake USB host; only its synthetic model/settings fixtures are inlined from the unexported control suite. The portable Makefile and pytest selection now include this hermetic integration slice. No dependencies, scientific contracts or deployment placeholders changed. Four synthetic screenshots were regenerated to reflect the new disclosure.
+
+A final fetch found two further commits across five private QA/documentation files: read-only WebKit peer identification and its regressions. They add no public product change or installed acceptance. The reviewed main advances to the revision above while the tested implementation baseline remains unchanged.
+
+Fresh public results are **381 Python tests, 50 frontend unit tests and 27 mocked Playwright tests passed**, plus frontend lint/build. See [validation](VALIDATION.md#source-sync-checks--2026-11-23) for the actual scope and exclusions.
+
+The session guard is a narrower source policy, not proof of the initiating Preflight session or permission to close only the relevant Files tab. Separate controlled WebKit and isolated guest research are summarized in the [development review](VALIDATION.md#development-status-review--2026-11-23); they do not establish installed desktop, physical USB, large-batch or production acceptance. No research controller/writer prototype, privileged QA runner, internal report, raw evidence, dataset, checkpoint, deployment identity or original Git history is imported. Unmerged branches are outside this snapshot.
+
+## Historical development review — 2026-11-15 14:23 CST
 
 Both repositories were fetched again before reviewing newly merged work.
 

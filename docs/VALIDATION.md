@@ -1,8 +1,45 @@
 # Validation record
 
-Updated 2026-11-15 for the public source sync described in [SOURCE_SYNC.md](SOURCE_SYNC.md). Checks below ran against this public checkout, including its sanitization and curated tests. They do not qualify an installed release.
+Updated **2026-11-23** for the public source sync described in [SOURCE_SYNC.md](SOURCE_SYNC.md). Current results below belong to this curated checkout. Earlier records are dated separately; none qualifies an installed release.
 
-## Source-sync checks
+## Source-sync checks — 2026-11-23
+
+| Check | Result | Scope |
+| --- | --- | --- |
+| Portable Python tests | **381 passed**, 27 modules | Synthetic data, fake host/USB/GTK/model adapters, in-process API and a temporary Unix socket |
+| Frontend unit tests | **50 passed**, 5 files | Mocked API interactions, including explicit busy-USB retry without focus-triggered requests |
+| Frontend lint, TypeScript and Vite build | **Passed** | Locked dependencies; generated assets excluded |
+| Mocked Playwright workflows | **26 passed** | Isolated Vite server; all API responses mocked; includes release-before-retry and no overlapping zero-image cleanup |
+| Synthetic screenshot walkthrough | **1 passed; four images reviewed** | Selection, preflight, progress and completion; updated disclosure, no research data |
+
+`make test-portable` now includes `tests/integration/test_preflight_export_boundary.py`. Its two cases use the actual API, USB socket protocol, USB agent and worker with temporary files and fake host/scanner/model adapters. Cancel or session close after reviewed Preflight leaves no outputs; explicit job confirmation creates the next result directory, preserves the input and previous result, and matches exported bytes to local outputs. This checks normal application flow, **not operating-system enforcement against all possible early writes**. The model and settings fixtures are copied inline from the unexported control suite; upstream test assertions are unchanged.
+
+The six new broker cases stub account/session lookup, command execution and release polling. They exercise the unique local-session policy without logging in, opening or closing any real window. They do not prove the initiating request's session or limit a per-user Files quit to one window/tab.
+
+Python used the existing Python 3.11.15 environment with pytest 9.1.1, Pillow 12.3.0, FastAPI 0.141.1, Starlette 1.3.1 and httpx2 2.7.0. Plugin autoload was disabled, inherited application/Python test settings were cleared, and caches/test files were isolated outside the checkout. Tests ran outside restricted execution so local IPC was available. No dependencies were installed or upgraded.
+
+Frontend checks used Node 20.20.2, npm 10.8.2, Vite 8.2.4 and Vitest 4.1.12 from the existing locked installation. Playwright 1.62.1 ran the 26 app cases and one opt-in capture with its cached Chromium build 1234, one worker and `PLAYWRIGHT_BASE_URL` unset. The screenshot fixture blocked unexpected API/external requests and disabled service workers. All four full-page PNGs retain the simulation banner and synthetic values; no application layout changes were made for capture.
+
+The publication review passed across **143 files**: 19 changed/added files and 124 unchanged files. Five imported source/test files match the selected source exactly; the adapted integration test preserves all upstream functions/assertions and its inline fixtures. All **38 local links/anchors**, 59 Python syntax checks, 10 shell syntax checks, five JSON parses and patch-whitespace checks passed. The dependency graph is valid and its inventory matches all 174 non-root lockfile entries. Only the four declared PNGs are allowed; both SVGs have no external references. No configured private-content pattern hits were found. Public placeholders, proxy isolation and scientific contracts are preserved. Pattern scanning is a bounded check, not a security certification.
+
+No real model inference, GPU, physical USB, deployed/live HTTP backend, browser-to-backend end-to-end run, installed desktop, reboot, image build or service mutation was performed. Fresh dependency installation, backend Ruff/Mypy, full coverage, mutation, fresh vulnerability and penetration audits were not run. GitHub desktop/mobile rendering and Drive playback were last checked on **2026-11-15** as recorded below; they were not rerun for this source refresh.
+
+## Development status review — 2026-11-23
+
+Merged development main `6a518f72e645761a4adb4d182b9188dec5a4c877` includes completed source repairs and additional controlled checks. The final two commits only extend private read-only WebKit peer QA; the selected public implementation remains `7e83edda5ad14b7a439b36f6dac8dca8585975a9`. The following are **reviewed development records, not executions or extra test counts for this public checkout**:
+
+| Reviewed progress | Evidence boundary |
+| --- | --- |
+| Busy guidance and conservative session guard merged | Source regressions pass. A unique local login still does not prove the initiating Preflight origin or selectively target the blocking Files view; that stronger broker requirement remains unresolved. Real local/remote desktop acceptance remains separate. |
+| Seeded-cache WebKit recovery and progress display | Controlled WebKitGTK runs with shipped frontend/helper bundles and synthetic endpoints support fresh assets, session handback/reopen and stage-specific units. The cache-recovery work was closed in development; this is not a natural large-batch run or a throughput benchmark. |
+| Controlled busy/retry and GUI QA improvements | Synthetic WebKit checks observed refusal followed by an explicit retry without job creation. New QA tools improve observation and target checks; installed close/reopen/switch/rollback and the remaining desktop matrix are still incomplete. Those tools are not exported. |
+| Isolated guest writer research | A synthetic guest experiment exercised a per-job directory and an unprivileged marker writer after an accepted exporting state. It did not publish product results or deliver the architecture into this product baseline; full-lifecycle write isolation and old-handle/replug cases remain open. |
+
+The earlier installed ownership-gate pass remains a historical result for its exact deployment. It does not qualify this newer checkout. Full physical lifecycle/format and large-batch acceptance, including the historical 100k-image exFAT/kernel stall, remain unqualified. The old November 15 mount-authorization prerequisite below is a dated handoff, not a complete description of today's remaining work. No candidate or Production approval follows from this review.
+
+Only these summaries are published. Private evidence, hardware identities, deployment paths, image/manifests and private test totals remain excluded.
+
+## Historical source-sync checks — 2026-11-15
 
 | Check | Result | Scope |
 | --- | --- | --- |
@@ -95,6 +132,6 @@ Refresh verification covered all 140 public files: only five documentation files
 
 ## Previous public baseline
 
-The initial 2026-11-14 public commit `da833aee2a77fec8e1d6d364c9df2c72082d02fc` recorded 271 portable Python tests and 43 frontend unit tests passing. Those historical counts belong to that snapshot; the table above records this update's fresh results.
+The initial 2026-11-14 public commit `da833aee2a77fec8e1d6d364c9df2c72082d02fc` recorded 271 portable Python tests and 43 frontend unit tests passing. Those historical counts belong to that snapshot; the dated tables above record later results.
 
 Private hardware reports and their gate counts are not published as validation for this checkout. Source-publication approval does not confer production readiness or assign a code-reuse license.

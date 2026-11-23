@@ -48,7 +48,7 @@ pythonpath = [
     "packages/simulator",
     "host/usb_agent",
 ]
-testpaths = ["tests/unit", "tests/whitebox"]
+testpaths = ["tests/unit", "tests/whitebox", "tests/integration"]
 markers = ["gpu: reserved for separately approved GPU validation; excluded from this source snapshot"]
 
 [tool.ruff]

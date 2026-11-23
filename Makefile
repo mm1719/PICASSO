@@ -2,9 +2,9 @@ PYTHON ?= python3
 
 .PHONY: test-portable web-lint web-build web-unit check
 
-# Only the exported hermetic tests. No checkpoints, hardware, daemon, sudo or Docker.
+# Exported hermetic tests, including a temporary Unix socket. No hardware, sudo or Docker.
 test-portable:
-	PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. $(PYTHON) -m pytest -q tests/unit tests/whitebox
+	PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. $(PYTHON) -m pytest -q tests/unit tests/whitebox tests/integration
 
 web-lint:
 	npm --prefix apps/web run lint

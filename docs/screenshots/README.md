@@ -1,6 +1,6 @@
 # Screenshot provenance and reproduction
 
-Captured on **2026-11-15** from the public React frontend based on commit `20fc98e627844f3fba37b47e0a080db317f2b219`, with the owner-approved original SVG logo restored. No application logic or layout was changed for this capture.
+Regenerated on **2026-11-23** from public commit `ee74a0d68be44530a1867ad505d2f636b1b6af7a` plus the reviewed frontend update from `7e83edda5ad14b7a439b36f6dac8dca8585975a9`. The screenshots now show the local/remote Files guidance and explicit retry text. The owner-approved original SVG and synthetic capture fixture are unchanged; no application layout was changed for capture.
 
 | Image | Visible step |
 | --- | --- |
@@ -11,7 +11,7 @@ Captured on **2026-11-15** from the public React frontend based on commit `20fc9
 
 ## What is real and what is simulated
 
-The page is the repository's actual frontend, rendered by Playwright Chromium. The capture script adds only the top banner, `SIMULATED UI · Synthetic data · No model or USB used`, outside the application. Images are full-page PNG captures at a 1440 × 1080 viewport and device scale 1; the completion page extends below the viewport. No compositing or image retouching is applied.
+The page is the repository's actual frontend, rendered by Playwright Chromium. The capture script adds only the top banner, `SIMULATED UI · Synthetic data · No model or USB used`, outside the application. Images are full-page PNG captures at a 1440 × 1080 viewport and device scale 1; page content may extend below the viewport. No compositing or image retouching is applied.
 
 Every API response is synthetic and defined in [the capture test](../../apps/web/e2e/showcase.spec.ts). The fake device, directory entries, metadata path, 12-image batch, predictions, rejection counts, throughput, storage figures and archive path do not come from a research dataset or installed workstation. No image or CSV contents are loaded. The banner applies to every status message, including GPU availability and export completion. The workstation-status card is the application's initial-load snapshot; the job panel updates through mocked polling.
 
@@ -31,7 +31,7 @@ env -u PLAYWRIGHT_BASE_URL PICASSO_SCREENSHOTS=1 npm run test:e2e -- e2e/showcas
 
 The first command downloads the Playwright browser if it is not already cached. The capture command starts its own loopback Vite server on port 4173 and overwrites only these four PNGs. It refuses an occupied port or an inherited `PLAYWRIGHT_BASE_URL`; do not point it at an installed service. Without `PICASSO_SCREENSHOTS=1`, the capture test is skipped so an ordinary browser test run does not rewrite documentation assets. Review all four images before publishing; fonts and rendering can vary between environments.
 
-The recorded run used Node 20.20.2, npm 10.8.2, Playwright 1.62.1 and its cached Chromium build 1234 on Linux. **One capture test passed**, with no unexpected API/external HTTP requests or page errors; all four images were visually reviewed. Frontend lint and build were also checked after restoring the SVG.
+The recorded run used Node 20.20.2, npm 10.8.2, Playwright 1.62.1 and its cached Chromium build 1234 on Linux. **One capture test passed**, with no unexpected API/external HTTP requests or page errors; all four images were visually reviewed. The same run passed 26 mocked workflow regressions; frontend unit tests, lint and build also passed. This is separate from the historical GitHub/Drive browser checks below.
 
 ## Logo and historical video
 
@@ -41,4 +41,4 @@ The root README uses a [presentation variant](../assets/picasso-logo-readme.svg)
 
 The [PICASSO v1 beta demo](https://drive.google.com/file/d/1i3bz5awIcIcf7QZb3rSTd7moFuEhFYoC/preview) is a separate historical recording from September 2026, approximately 5 minutes 17 seconds long. The owner confirmed its contents are approved for public linking. It includes the original logo, desktop workflow and exported result files; it is not the source of these synthetic screenshots. Its existing Drive link-sharing permission was left unchanged, and the video is not copied into this repository. It is neither a benchmark nor evidence that the current checkout has passed hardware validation.
 
-The preview endpoint replaces the standard Drive viewer link after a mobile playback check exposed a viewer error. Desktop and Android-emulated playback through the published README were subsequently verified. The [live browser record](../VALIDATION.md#live-browser-follow-up--2026-11-15) also documents the single-column screenshot layout and full-size image-link checks, with their limits.
+The preview endpoint replaces the standard Drive viewer link after a mobile playback check exposed a viewer error. Desktop and Android-emulated playback through the published README were subsequently verified on 2026-11-15; playback was not rerun for the 2026-11-23 source refresh. The [live browser record](../VALIDATION.md#live-browser-follow-up--2026-11-15) also documents the single-column screenshot layout and full-size image-link checks, with their limits.

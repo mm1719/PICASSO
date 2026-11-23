@@ -393,7 +393,8 @@ def _active_local_session(user: str) -> bool:
         )
     except (OSError, subprocess.TimeoutExpired):
         return False
-    if sessions.returncode != 0:
+    # The quit action is per-user, not scoped to a provable initiating session.
+    if sessions.returncode != 0 or len(sessions.stdout.split()) != 1:
         return False
     for session in sessions.stdout.split():
         try:

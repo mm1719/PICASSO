@@ -460,7 +460,9 @@ function App() {
       if (reason instanceof HttpError && reason.status === 503 && reason.message === 'native mount is busy') {
         // This initial claim was refused before an asynchronous run was accepted.
         setPreflightRun((run) => run?.preflight_id === 'pending' ? null : run)
-        setError('This USB is being used by another program. Save and close documents on this USB, then retry Preflight.')
+        setError('This USB is being used by another program. Save and close documents on this USB, then retry Preflight. '
+          + 'Also close Files windows showing this USB, whether you are using a local or remote desktop. '
+          + 'Click Run preflight when ready to retry.')
       } else {
         if (reason instanceof HttpError && reason.preflightId) {
           // Keep the failed claim addressable: Refresh must release it before clearing selection.
@@ -668,7 +670,7 @@ function App() {
               >
                 Run preflight
               </button>
-              <p className="disclosure">During preflight and the job, PICASSO temporarily owns this USB exclusively. It is unavailable in Ubuntu Files; any open Files window may close, and access returns after completion or cancellation.</p>
+              <p className="disclosure">During preflight and the job, PICASSO temporarily owns this USB exclusively. It is unavailable in Ubuntu Files, and access returns after completion or cancellation. On a local desktop, open Files windows may close automatically. If this USB is busy, save your work and close Files windows showing this USB yourself, then click Run preflight to retry. This applies to local and remote desktops.</p>
             </div>
           )}
         </section>

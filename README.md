@@ -24,7 +24,7 @@ The screenshots below use the **current public frontend with synthetic API respo
 
 ### 1. Select a source
 
-Choose an image folder, optionally supply a metadata CSV path, then select **Run preflight**.
+Choose an image folder, optionally supply a metadata CSV path, then select **Run preflight**. If the USB is busy, save your work, close Files windows showing that USB, and explicitly retry; this applies to local and remote desktops.
 
 [![Select the synthetic DEMO USB folder and optional metadata CSV](docs/screenshots/01-select-source.png)](https://raw.githubusercontent.com/mm1719/PICASSO/main/docs/screenshots/01-select-source.png)
 
@@ -79,7 +79,7 @@ Scores are **uncalibrated softmax scores**, not probabilities of correctness. Th
 | **Explicit USB ownership** | A restricted service and fixed-operation broker control exclusive access. Cleanup responsibility survives lost replies, and rollback rechecks device identity. |
 | **GPU coordination** | The worker acquires a shared advisory lock before loading the model, coordinating with cooperating training processes. |
 | **Separated application and host privileges** | Non-root, read-only application containers do not receive raw USB block devices. Privileged mount operations stay in the host broker. |
-| **Recovery tested across layers** | Fake host adapters, in-process API tests, and mocked UI tests exercise failure paths, including cleanup retries and launcher rollback. |
+| **Recovery tested across layers** | Fake host adapters, in-process API/socket/worker checks, and mocked UI tests cover export only after confirmation, cleanup retries, and launcher rollback. |
 
 The stack combines **React, TypeScript and Vite** for the interface, **FastAPI** for local control, **SQLite** for persistence, and **PyTorch/timm** for the inference adapter. Docker Compose, systemd and Polkit source illustrate the deployment boundary.
 
@@ -103,18 +103,18 @@ See [architecture and scientific contracts](docs/ARCHITECTURE.md) and [security 
 
 ## Validation and current limits
 
-The latest recorded source validation, **2026-11-15**, covers the curated public checkout:
+The latest recorded source validation, **2026-11-23**, covers the curated public checkout:
 
 | Check | Recorded result |
 | --- | --- |
-| Portable Python tests | **373 passed** across 25 modules, using synthetic data and fake host/USB adapters |
-| Frontend unit tests | **49 passed** across 4 files, with mocked API interactions |
+| Portable Python tests | **381 passed** across 27 modules, including an in-process API → temporary USB socket → worker export regression with fake host/model adapters |
+| Frontend unit tests | **50 passed** across 5 files, with mocked API interactions |
 | Frontend lint, TypeScript and Vite build | **Passed** |
-| Synthetic screenshot walkthrough | **1 Playwright test passed**, capturing the four states above with all API calls mocked |
+| Mocked browser workflows and screenshots | **27 Playwright tests passed**: 26 workflow regressions and one four-state screenshot capture; all API calls mocked |
 
 These are source-level and mocked-browser checks. No model-quality benchmark, real inference, GPU, physical USB, live API integration, browser-to-backend end-to-end, host reboot, or deployment validation was performed for this public snapshot. Fresh Python dependency installation, full coverage, mutation testing, dependency-vulnerability and penetration audits were also not performed. There is no production-readiness or project-wide 100% coverage claim.
 
-**Development status, 2026-11-15:** separately reviewed deployment records report a passed installed USB-ownership gate and a prepared test candidate. Further physical-lifecycle and large-batch checks remain pending a desktop mount-authorization prerequisite. The latest merged delta is documentation-only; these records do not add to the public test results above. See the [development status and limits](docs/VALIDATION.md#development-status-review--2026-11-15).
+**Development status, 2026-11-23:** this update includes clearer busy-USB guidance, a stricter multi-session Files-close guard, and new export/retry regressions. Separate controlled WebKit checks support cache recovery and progress display, but precise Files-window targeting, installed desktop acceptance, full physical USB lifecycle and the historical large-batch/kernel stall remain unqualified. See the [development status and limits](docs/VALIDATION.md#development-status-review--2026-11-23).
 
 The supported design scope is **one local machine, one user, and one active inference job**. It has no authentication or multi-tenant isolation and must not be exposed as a public-network service. Workstation assumptions remain in the reference source. Broker recovery has regression coverage, but full hardware recovery and historical exFAT/kernel-stall resolution remain unqualified.
 
@@ -133,7 +133,7 @@ python -m pip install -r requirements/showcase-dev.txt
 make test-portable PYTHON=python
 ```
 
-Tests use temporary files, synthetic scores, fake host/USB/GTK adapters, and an in-process API client. They do not open real windows, start a live API server, load a model, require service accounts, or modify attached media. After dependencies are installed, the test run is offline.
+Tests use temporary files, synthetic scores, fake host/USB/GTK/model adapters, an in-process API client, and a temporary local Unix socket. They do not open real windows, start a live API server, load a model, require service accounts, or modify attached media. After dependencies are installed, the test run is offline.
 
 ### Build and inspect the interface
 

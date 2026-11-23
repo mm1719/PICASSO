@@ -205,6 +205,67 @@ test('navigates a nested source and blocks start when storage is insufficient', 
   await expect(page.getByRole('button', { name: 'Confirm and start' })).toBeDisabled()
 })
 
+test('rechecks local space only after releasing the old preflight and explicitly retrying', async ({ page }) => {
+  await mockCommon(page)
+  const mutations: string[] = []
+  page.on('request', (req) => {
+    const path = new URL(req.url()).pathname
+    if (req.method() !== 'GET' && path.startsWith('/api/v1/') && !path.startsWith('/api/v1/session/')) {
+      mutations.push(`${req.method()} ${path}`)
+    }
+  })
+  const preflight = '/api/v1/devices/device-1/preflight'
+  const first = '/api/v1/preflights/space-1'
+  let free = 1024
+  let sequence = 0
+  let canRelease = false
+  await page.route('**/api/v1/devices/device-1/tree?*', (route) => json(route,
+    ['a.png', 'b.png'].map((name) => ({ name, relative_path: name, kind: 'file', size_bytes: 1024 })),
+  ))
+  await page.route('**' + preflight, (route) => json(route, {
+    preflight_id: `space-${++sequence}`, status: 'completed', stage: 'completed',
+    processed: 2, total: 2, percentage: 100, eta_seconds: 0, error: null,
+    summary: { file_count: 2, source_bytes: 2048, required_free_bytes: 4096,
+      local_free_bytes: free, has_enough_space: free >= 4096 },
+  }))
+  await page.route('**' + first, (route) => canRelease
+    ? json(route, { preflight_id: 'space-1', status: 'cancelled', stage: 'cancelled',
+      processed: 2, total: 2, percentage: null, eta_seconds: null, summary: null, error: null })
+    : json(route, { detail: 'USB host service is unavailable' }, 503))
+
+  await page.goto('/')
+  await page.getByRole('button', { name: /SCIENCE/ }).click()
+  const run = page.getByRole('button', { name: 'Run preflight' })
+  const confirm = page.getByRole('button', { name: 'Confirm and start' })
+  const available = page.getByText('Local free', { exact: true }).locator('..').locator('dd')
+  await run.click()
+  await expect(page.getByText('Not enough local storage.')).toBeVisible()
+  await expect(available).toHaveText('1.00 KB')
+  await expect(page.getByText('Required locally', { exact: true }).locator('..').locator('dd')).toHaveText('4.00 KB')
+  await expect(confirm).toBeDisabled()
+
+  free = 8192
+  const refresh = page.getByRole('button', { name: 'Refresh' })
+  await refresh.click()
+  await expect(page.getByText('Could not release preflight. Try again.')).toBeVisible()
+  await expect(available).toHaveText('1.00 KB')
+  await expect(confirm).toBeDisabled()
+  await expect(run).toBeDisabled()
+  expect(mutations).toEqual([`POST ${preflight}`, `DELETE ${first}`])
+
+  canRelease = true
+  await refresh.click()
+  await expect(run).toBeEnabled()
+  await expect(confirm).toHaveCount(0)
+  const released = [`POST ${preflight}`, `DELETE ${first}`, `DELETE ${first}`]
+  expect(mutations).toEqual(released)
+  await run.click()
+  await expect(page.getByText('Storage check passed.')).toBeVisible()
+  await expect(available).toHaveText('8.00 KB')
+  await expect(confirm).toBeEnabled()
+  expect(mutations).toEqual([...released, `POST ${preflight}`])
+})
+
 test('reconciles USB removal on Refresh', async ({ page }) => {
   let connected = true
   await page.route('**/api/v1/devices', (route) => json(route, connected ? [{
@@ -327,20 +388,20 @@ test('recovers a retained preflight invalidated by an API restart', async ({ pag
   await expect(page.getByRole('button', { name: 'Run preflight' })).toBeEnabled()
 })
 
-test('Refresh releases a completed zero-image preflight without creating a job', async ({ page }) => {
+test('zero-image Refresh waits for one same-ID release, even on a second click', async ({ page }) => {
+  const claim = '/api/v1/devices/device-1/preflight'
   const mutations: string[] = []
-  page.on('request', (request) => {
-    if (request.method() === 'POST' && request.url().endsWith('/api/v1/jobs')) {
-      mutations.push(`${request.method()} ${new URL(request.url()).pathname}`)
-    }
-    if (request.method() === 'DELETE') {
-      mutations.push(`${request.method()} ${new URL(request.url()).pathname}`)
+  const replies: string[] = []
+  page.on('response', (response) => {
+    if (response.request().method() === 'DELETE') {
+      replies.push(`${response.status()} ${new URL(response.url()).pathname}`)
     }
   })
   await mockCommon(page)
   await page.route('**/api/v1/devices/device-1/tree?*', (route) => json(route, []))
-  await page.route('**/api/v1/devices/device-1/preflight', (route) => json(route, {
-    preflight_id: 'preflight-1',
+  let sequence = 0
+  await page.route('**' + claim, (route) => json(route, {
+    preflight_id: `zero-${++sequence}`,
     status: 'completed',
     stage: 'completed',
     processed: 0,
@@ -356,28 +417,67 @@ test('Refresh releases a completed zero-image preflight without creating a job',
     },
     error: null,
   }))
-  await page.route('**/api/v1/preflights/preflight-1', (route) => json(route, {
-    preflight_id: 'preflight-1',
-    status: 'cancelled',
-    stage: 'cancelled',
-    processed: 0,
-    total: 0,
-    percentage: null,
-    eta_seconds: null,
-    summary: null,
-    error: null,
-  }))
+  let firstAtEndpoint = false
+  let finish!: () => void
+  const firstRelease = new Promise<void>((resolve) => { finish = resolve })
+  await page.route('**/api/v1/preflights/*', async (route) => {
+    if (route.request().method() !== 'DELETE') return json(route, { detail: 'method not allowed' }, 405)
+    const id = new URL(route.request().url()).pathname.split('/').pop()
+    if (id === 'zero-1') {
+      firstAtEndpoint = true
+      await firstRelease
+    }
+    await json(route, { preflight_id: id, status: 'cancelled', stage: 'cancelled',
+      processed: 0, total: 0, percentage: null, eta_seconds: null, summary: null, error: null })
+  })
 
   await page.goto('/')
   await page.getByRole('button', { name: /SCIENCE/ }).click()
-  await page.getByRole('button', { name: 'Run preflight' }).click()
-  await expect(page.getByText('Storage check passed.')).toBeVisible()
-
-  await page.getByRole('button', { name: 'Refresh' }).click()
-  await expect(page.getByText('Storage check passed.')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Confirm and start' })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Run preflight' })).toBeVisible()
-  expect(mutations).toEqual(['DELETE /api/v1/preflights/preflight-1'])
+  const run = page.getByRole('button', { name: 'Run preflight' })
+  const confirm = page.getByRole('button', { name: 'Confirm and start' })
+  const refresh = page.getByRole('button', { name: 'Refresh' })
+  const summary = page.getByText('Storage check passed.')
+  const expected: string[] = []
+  await expect(run).toBeEnabled()
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname
+    const heartbeat = request.method() === 'POST' && path === '/api/v1/session/heartbeat'
+    if (request.method() !== 'GET' && path.startsWith('/api/v1/') && !heartbeat) {
+      mutations.push(`${request.method()} ${path}`)
+    }
+  })
+  for (const round of [1, 2]) {
+    const [response] = await Promise.all([page.waitForResponse((r) =>
+      r.request().method() === 'POST' && new URL(r.url()).pathname === claim), run.click()])
+    const { preflight_id: id } = await response.json()
+    expect(id).toBe(`zero-${round}`)
+    const release = `/api/v1/preflights/${id}`
+    await expect(page.getByText('Images', { exact: true }).locator('..').locator('dd')).toHaveText('0')
+    await expect(summary).toBeVisible()
+    await expect(confirm).toBeDisabled()
+    expected.push(`POST ${claim}`, `DELETE ${release}`)
+    try {
+      await refresh.click()
+      await expect.poll(() => mutations).toEqual(expected)
+      if (round === 1) {
+        await expect.poll(() => firstAtEndpoint).toBe(true)
+        if (await refresh.isEnabled()) await refresh.click()
+        else await expect(refresh).toBeDisabled()
+        await expect(run).toBeDisabled()
+        await expect(confirm).toBeDisabled()
+        await expect(summary).toBeVisible()
+        expect(replies).toEqual([]) // The first release response is still held.
+      }
+    } finally {
+      if (round === 1) finish()
+    }
+    await expect(summary).toHaveCount(0)
+    await expect(confirm).toHaveCount(0)
+    await expect(run).toBeEnabled()
+    expect(replies).toHaveLength(round)
+    expect(replies[round - 1]).toBe(`200 ${release}`)
+    expect(mutations).toEqual(expected)
+  }
 })
 
 test('Refresh keeps an existing non-terminal job attached without cancellation', async ({ page }) => {
